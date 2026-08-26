@@ -1,0 +1,14 @@
+build/
+.gradle/
+.kotlin/
+.idea/
+local.properties
+native/build/
+app/src/main/jniLibs/
+*.apk
+*.aab
+*.jks
+*.keystore
+keystore.properties
+*.log
+core.*

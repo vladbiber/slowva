@@ -1,0 +1,12 @@
+[package]
+name = "slowva-token"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# rustls, not openssl: there is no system openssl to link against on Android
+librespot-core = { version = "=0.8.0", default-features = false, features = ["rustls-tls-webpki-roots"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[profile.release]
+strip = true

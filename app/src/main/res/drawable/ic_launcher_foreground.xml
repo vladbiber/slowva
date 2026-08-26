@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- a waveform being stretched: bars grow wider and lower to the right -->
+    <path android:fillColor="#B48EAD" android:pathData="M31,44 h3 v20 h-3 z" />
+    <path android:fillColor="#B48EAD" android:pathData="M37,38 h3.5 v32 h-3.5 z" />
+    <path android:fillColor="#A98CC2" android:pathData="M44,32 h4 v44 h-4 z" />
+    <path android:fillColor="#9C8BD4" android:pathData="M52,40 h5 v28 h-5 z" />
+    <path android:fillColor="#8E88E0" android:pathData="M61,46 h6 v16 h-6 z" />
+    <path android:fillColor="#7C85EC" android:pathData="M71,50 h7 v8 h-7 z" />
+</vector>

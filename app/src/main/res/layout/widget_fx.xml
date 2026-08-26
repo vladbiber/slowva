@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_fx_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/widget_fx_track"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:text="@string/app_name"
+        android:textColor="#FFF8FF"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_slow"
+            android:textColor="#C9BEBFCC"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_slow_down"
+            android:layout_width="32dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/symbol_minus"
+            android:textColor="#FFE0B8FF"
+            android:textSize="22sp" />
+
+        <ProgressBar
+            android:id="@+id/widget_slow_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="5dp"
+            android:layout_weight="1"
+            android:max="75"
+            android:progress="50"
+            android:progressBackgroundTint="#463D4D"
+            android:progressTint="#FFB48EAD" />
+
+        <TextView
+            android:id="@+id/widget_slow_up"
+            android:layout_width="32dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/symbol_plus"
+            android:textColor="#FFE0B8FF"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/widget_slow_value"
+            android:layout_width="42dp"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:text="@string/widget_rate_default"
+            android:textColor="#FFF8FF"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_reverb"
+            android:textColor="#C9BEBFCC"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_reverb_down"
+            android:layout_width="32dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/symbol_minus"
+            android:textColor="#FFE0B8FF"
+            android:textSize="22sp" />
+
+        <ProgressBar
+            android:id="@+id/widget_reverb_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="5dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="0"
+            android:progressBackgroundTint="#463D4D"
+            android:progressTint="#FF8F6EAC" />
+
+        <TextView
+            android:id="@+id/widget_reverb_up"
+            android:layout_width="32dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/symbol_plus"
+            android:textColor="#FFE0B8FF"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/widget_reverb_value"
+            android:layout_width="42dp"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:text="@string/widget_reverb_default"
+            android:textColor="#FFF8FF"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_connect"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:background="@drawable/widget_connect_background"
+        android:contentDescription="@string/connect_this_phone"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:text="@string/widget_connect_phone"
+        android:textColor="#FF23172B"
+        android:textSize="11sp" />
+</LinearLayout>
