@@ -26,6 +26,18 @@ locally on the phone.
 
 Spotify Premium is required for Development Mode and local playback.
 
+## Install the APK
+
+Download the ready-made Android 8.0+ arm64 APK from the
+[Slowva 1.7 release](https://github.com/vladbiber/slowva/releases/tag/1.7),
+or use the direct link:
+
+[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/1.7/Slowva-arm64-v8a.apk)
+
+This build is intended for modern arm64 Android phones, including Samsung
+devices. Android may ask you to allow installation from your browser or file
+manager. SHA-256: `8ad927cdae52f901363ece2f27e9b7e29d5bddc294f12466bc79ba696e7f6a4a`.
+
 ## One-time Spotify setup
 
 Public builds intentionally do **not** contain the maintainer's Spotify Client
