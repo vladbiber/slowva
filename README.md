@@ -22,6 +22,14 @@ locally on the phone.
 - **Slowva FX** home-screen widget for slow, reverb and local-player controls
 - optional **Slowva CAVA** home-screen widget; no visualizer covers the album in
   the app itself
+- five interactive player looks: **Vinyl** (tonearm, scratch to seek), **CD**,
+  **Tape** (drag to shuttle), **TP-7** (jog wheel, slow fader, reverb knob) and
+  **Cover**; design inspired by [Spun](https://github.com/yappologistic/Spun)
+  by [@yappologistic](https://github.com/yappologistic)
+- **Real vinyl sound**: crackle, pops, scratches, wow & flutter, warmth, hiss
+- **Reverse mode**: whole tracks played from the last second to the first
+- **8D rotation**, stereo width and an "another room" muffle effect
+- one-tap presets: Slowed + reverb, Daycore, Nightcore, Lo-fi record and more
 - arm64 phone and x86_64 emulator builds
 
 Spotify Premium is required for Development Mode and local playback.
@@ -29,14 +37,14 @@ Spotify Premium is required for Development Mode and local playback.
 ## Install the APK
 
 Download the ready-made Android 8.0+ arm64 APK from the
-[Slowva 1.7 release](https://github.com/vladbiber/slowva/releases/tag/1.7),
+[Slowva 1.9.2 release](https://github.com/vladbiber/slowva/releases/tag/1.9.2),
 or use the direct link:
 
-[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/1.7/Slowva-arm64-v8a.apk)
+[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/1.9.2/Slowva-arm64-v8a.apk)
 
 This build is intended for modern arm64 Android phones, including Samsung
 devices. Android may ask you to allow installation from your browser or file
-manager. SHA-256: `8ad927cdae52f901363ece2f27e9b7e29d5bddc294f12466bc79ba696e7f6a4a`.
+manager. SHA-256: `36c13dbc5be9f32113e850495fc36d145ea27a571d57a448161742a3fb63036b`.
 
 ## One-time Spotify setup
 
@@ -92,6 +100,16 @@ build instead; see `SPOTIFY_CLIENT_ID` under Building.
 - **Frequency presets** retune the nearest note to the selected frequency. The
   healing or biological claims often attached to “solfeggio” frequencies are
   not supported by research; the presets are included only as sound effects.
+- **Vinyl** adds wow and flutter locked to a 33⅓ rpm platter (slower when the
+  track is slowed), groove rolloff with soft saturation and mono bass, surface
+  hiss, motor rumble, random crackle and two scratches that tick once per
+  revolution. Presets: Mint, Played, Dusty, Lo-fi.
+- **Reverse** decodes the complete track once (`libslowvareverse.so`, a small
+  librespot decoder that registers no Connect device), then plays the PCM from
+  the end through the same effect chain and continues with the next track.
+  Decoded tracks take about 10 MB per minute; the last four are kept.
+- **Space**: stereo width, an equal-power "8D" auto-pan and a low-pass
+  "another room" effect.
 
 Slider changes are smoothed in the DSP to prevent abrupt speed jumps and
 reverb clicks.
@@ -170,6 +188,14 @@ extracted into Android's executable `nativeLibraryDir`.
   the PCM pipe is deliberately consumed below real time.
 - Effects apply only while playback is on the local Slowva device.
 - The app supports Android 8.0+ and arm64/x86_64.
+
+## Credits
+
+The player looks (vinyl, CD, cassette and TP-7 style) are inspired by
+[Spun](https://github.com/yappologistic/Spun), a CD-shaped music player for
+Linux by [@yappologistic](https://github.com/yappologistic). Slowva's versions
+are an independent Jetpack Compose reimplementation; no Spun code or assets are
+included. Thank you for the beautiful designs.
 
 ## License
 

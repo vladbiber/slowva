@@ -23,8 +23,8 @@ android {
         applicationId = "com.slowva.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 12
+        versionName = "1.9.2"
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$bundledSpotifyClientId\"")
         vectorDrawables { useSupportLibrary = true }
     }

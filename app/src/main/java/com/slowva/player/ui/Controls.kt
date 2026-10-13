@@ -10,6 +10,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
@@ -24,6 +27,9 @@ fun MarkedSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     default: Float,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    description: String? = null,
+    stateText: String? = null,
 ) {
     val span = valueRange.endInclusive - valueRange.start
     val fraction = ((default - valueRange.start) / span).coerceIn(0f, 1f)
@@ -47,6 +53,11 @@ fun MarkedSlider(
             )
         }
         Slider(
+            enabled = enabled,
+            modifier = Modifier.semantics {
+                description?.let { contentDescription = it }
+                stateText?.let { stateDescription = it }
+            },
             value = value.coerceIn(valueRange),
             onValueChange = { raw ->
                 onValueChange(if (abs(raw - default) < span * 0.02f) default else raw)

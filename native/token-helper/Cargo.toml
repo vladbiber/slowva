@@ -6,7 +6,16 @@ edition = "2021"
 [dependencies]
 # rustls, not openssl: there is no system openssl to link against on Android
 librespot-core = { version = "=0.8.0", default-features = false, features = ["rustls-tls-webpki-roots"] }
+librespot-playback = { version = "=0.8.0", default-features = false, features = ["rustls-tls-webpki-roots"] }
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[[bin]]
+name = "slowva-token"
+path = "src/main.rs"
+
+[[bin]]
+name = "slowva-reverse"
+path = "src/bin/slowva-reverse.rs"
 
 [profile.release]
 strip = true

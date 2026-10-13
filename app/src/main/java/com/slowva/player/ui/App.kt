@@ -1,5 +1,6 @@
 package com.slowva.player.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,7 +57,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
 import com.slowva.player.player.PlayerHub
 
-private enum class Tab(val label: String) { LIBRARY("Library"), SEARCH("Search"), FX("Effects") }
+private enum class Tab(val label: String) { LIBRARY("Library"), SEARCH("Search"), FX("Sound") }
 
 @Composable
 fun AppRoot(vm: AppViewModel) {
@@ -88,6 +91,7 @@ fun AppRoot(vm: AppViewModel) {
     var showPlayer by remember { mutableStateOf(false) }
     val busy by vm.busy.collectAsState()
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
@@ -136,7 +140,12 @@ fun AppRoot(vm: AppViewModel) {
         }
     }
 
-    if (showPlayer) FullPlayer(onClose = { showPlayer = false })
+    // an in-window overlay, not a Dialog: dialogs get no system bar insets
+    if (showPlayer) {
+        BackHandler { showPlayer = false }
+        PlayerContent(onClose = { showPlayer = false })
+    }
+    }
 }
 
 @Composable
@@ -209,39 +218,66 @@ private fun LoginScreen(vm: AppViewModel, snackbar: SnackbarHostState) {
 private fun MiniPlayer(onOpen: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track ?: return
-    Row(
-        Modifier
+    val playing = state?.isPlaying == true
+    val progress = (state?.progressMs ?: 0).toFloat() / track.durationMs.coerceAtLeast(1)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        AsyncImage(
-            model = track.art,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.outline)
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(track.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-            Text(
-                track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = { PlayerHub.togglePlay() }) {
-            Icon(
-                if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = "play/pause"
-            )
-        }
-        IconButton(onClick = { PlayerHub.next() }) {
-            Icon(Icons.Default.SkipNext, contentDescription = "next")
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = "open player", onClick = onOpen)
+                    .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = track.art,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.outline)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                    Text(track.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { PlayerHub.togglePlay() }) {
+                    Icon(
+                        if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (playing) "Pause" else "Play"
+                    )
+                }
+                IconButton(onClick = { PlayerHub.next() }) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next track")
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(MaterialTheme.colorScheme.outline)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
         }
     }
 }

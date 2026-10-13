@@ -41,11 +41,15 @@ build() {
 
     # The token helper reuses the authenticated local librespot session so the
     # Web API can recover when a normal OAuth access token expires.
-    ( cd "$HERE/token-helper" && cargo build --release --locked --target "$target" \
+    ( cd "$HERE/token-helper" && cargo build --release --locked --bins --target "$target" \
         --target-dir "$HERE/build/$abi/token-target" )
     cp "$HERE/build/$abi/token-target/$target/release/slowva-token" \
         "$OUT/$abi/libslowvatoken.so"
     "$TOOL/llvm-strip" "$OUT/$abi/libslowvatoken.so" 2>/dev/null || true
+    # Reverse mode decodes a whole track to a file first, without a Connect device.
+    cp "$HERE/build/$abi/token-target/$target/release/slowva-reverse" \
+        "$OUT/$abi/libslowvareverse.so"
+    "$TOOL/llvm-strip" "$OUT/$abi/libslowvareverse.so" 2>/dev/null || true
 
     # Prefer IPv4 for consumer routers that advertise unusable IPv6 routes.
     "$TOOL/${compiler_target}${API}-clang" -shared -fPIC -O2 "$HERE/ipv4.c" -ldl \

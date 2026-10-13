@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,8 +30,18 @@ object PlayerHub {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val fx = Fx()
+    lateinit var reverse: ReversePlayer
+        private set
+    private val noReverse = MutableStateFlow<ReversePlayer.State?>(null)
+    val reverseState: StateFlow<ReversePlayer.State?> get() = if (::reverse.isInitialized) reverse.state else noReverse
+    /** reverse mode is on; it stays on across tracks until switched off */
+    val reverseOn = MutableStateFlow(false)
+    private var queue: List<Track> = emptyList()
+    private var queueIndex = 0
     lateinit var local: LocalPlayer
         private set
+    private val noSpectrum = MutableStateFlow(FloatArray(SpectrumAnalyzer.BAR_COUNT))
+    val spectrum: StateFlow<FloatArray> get() = if (::local.isInitialized) local.spectrum else noSpectrum
     lateinit var api: Spotify
         private set
 
@@ -50,8 +61,13 @@ object PlayerHub {
         app = context.applicationContext
         api = Spotify(app)
         local = LocalPlayer(app, fx)
+        reverse = ReversePlayer(app, fx).apply {
+            onSpectrum = { local.spectrum.value = it }
+            onFinished = { scope.launch { reverseStep(+1) } }
+        }
         loadFx()
         startPolling()
+        scope.launch { reverse.state.collect { if (reverseOn.value) mirrorReverse() } }
     }
 
     fun say(text: String?) {
@@ -292,6 +308,12 @@ object PlayerHub {
     }
 
     fun playTracks(tracks: List<Track>, index: Int, contextUri: String? = null) {
+        queue = tracks
+        queueIndex = index
+        if (reverseOn.value) {
+            scope.launch { tracks.getOrNull(index)?.let { launchReverse(it) } }
+            return
+        }
         scope.launch {
             val device = ensureLocal(transferPlayback = false)
             if (device == null) return@launch
@@ -310,6 +332,14 @@ object PlayerHub {
     }
 
     fun togglePlay() = scope.launch {
+        if (reverseOn.value) {
+            val st = reverse.state.value ?: return@launch
+            if (st.preparing) return@launch
+            if (st.positionMs <= 0 && !st.playing) reverse.seek(st.durationMs)
+            reverse.setPaused(st.playing)
+            mirrorReverse()
+            return@launch
+        }
         runCatching {
             val state = playback.value
             if (state?.isPlaying == true) {
@@ -323,9 +353,84 @@ object PlayerHub {
         refresh()
     }
 
-    fun next() = call("next") { api.next() }
-    fun previous() = call("prev") { api.previous() }
-    fun seek(ms: Int) = call("seek") { api.seek(ms) }
+    fun next() { if (reverseOn.value) scope.launch { reverseStep(+1) } else call("next") { api.next() } }
+    fun previous() { if (reverseOn.value) scope.launch { reverseStep(-1) } else call("prev") { api.previous() } }
+    fun seek(ms: Int) { if (reverseOn.value) { reverse.seek(ms.toLong()); mirrorReverse() } else call("seek") { api.seek(ms) } }
+
+    // ---- reverse mode ----------------------------------------------------
+
+    fun toggleReverse() = scope.launch { if (reverseOn.value) leaveReverse() else enterReverse() }
+
+    private suspend fun enterReverse() {
+        val st = playback.value
+        val track = st?.track ?: run { say("start a track before using reverse"); return }
+        if (!SessionToken.available(app)) {
+            say("reverse needs the phone paired once (Play here), so it can decode tracks")
+            return
+        }
+        reverseOn.value = true
+        holdForeground()
+        if (st.isPlaying) runCatching { api.pause() }
+        val i = queue.indexOfFirst { it.id == track.id }
+        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0 }
+        launchReverse(track)
+    }
+
+    private suspend fun launchReverse(track: Track) {
+        reverse.preparing(track)
+        mirrorReverse()
+        say("reverse: decoding ${track.name}…")
+        reverse.volume = (playback.value?.volumePercent ?: 100) / 100f
+        reverse.decode(track)
+            .onSuccess { file ->
+                if (!reverseOn.value) return
+                reverse.start(track, file)
+                mirrorReverse()
+                say("reverse: end → beginning")
+            }
+            .onFailure {
+                say("reverse failed: ${it.message?.take(140)}")
+                leaveReverse(resume = false)
+            }
+    }
+
+    /** At a track's beginning reverse mode moves on to the next track, like spotc. */
+    private suspend fun reverseStep(dir: Int) {
+        if (!reverseOn.value) return
+        val next = queueIndex + dir
+        val track = queue.getOrNull(next)
+        if (track == null) {
+            if (dir > 0) { reverse.setPaused(true); mirrorReverse() } else reverse.seek(reverse.state.value?.durationMs ?: 0)
+            return
+        }
+        queueIndex = next
+        launchReverse(track)
+    }
+
+    private suspend fun leaveReverse(resume: Boolean = true) {
+        val st = reverse.state.value
+        reverse.stop()
+        reverseOn.value = false
+        releaseForeground()
+        if (resume && st != null && !st.preparing) {
+            val device = ensureLocal(transferPlayback = false) ?: return
+            runCatching {
+                val window = queue.drop(queueIndex).take(100).map { it.uri }.ifEmpty { listOf(st.track.uri) }
+                api.play(device, uris = window, offset = 0, positionMs = st.positionMs.toInt())
+            }.onFailure { say("could not resume: ${it.message?.take(120)}") }
+        }
+        delay(400)
+        refresh()
+    }
+
+    /** Shows the reversed track in the regular playback state the UI reads. */
+    private fun mirrorReverse() {
+        val r = reverse.state.value ?: return
+        val base = playback.value
+        playback.value = (base ?: PlaybackState(r.track, false, 0, null, null, false, "off", 100)).copy(
+            track = r.track, isPlaying = r.playing, progressMs = r.positionMs.toInt(),
+        )
+    }
     fun setVolume(percent: Int) = call("volume") { api.setVolume(percent) }
     fun toggleShuffle() = call("shuffle") { api.setShuffle(!(playback.value?.shuffle ?: false)) }
     fun cycleRepeat() = call("repeat") {
@@ -344,7 +449,13 @@ object PlayerHub {
     }
 
     suspend fun refresh() {
-        runCatching { api.state() }.onSuccess { playback.value = it }
+        runCatching { api.state() }.onSuccess {
+            playback.value = it
+            if (reverseOn.value) {
+                reverse.volume = it?.volumePercent?.div(100f) ?: reverse.volume
+                mirrorReverse()
+            }
+        }
     }
 
     private fun startPolling() {
@@ -405,11 +516,45 @@ object PlayerHub {
         if (preset.reverb > 0f) setReverb(preset.reverb) else saveFx()
     }
 
+    val width = MutableStateFlow(1.0f)
+    val pan8d = MutableStateFlow(0.0f)
+    val muffle = MutableStateFlow(0.0f)
+
+    fun setSpace(width: Float = this.width.value, pan8d: Float = this.pan8d.value, muffle: Float = this.muffle.value) {
+        this.width.value = width; this.pan8d.value = pan8d; this.muffle.value = muffle
+        fx.width = width; fx.pan8d = pan8d; fx.muffle = muffle
+        saveFx()
+    }
+
+    fun applyMood(mood: Mood) {
+        setRetune(0)
+        setSpeed(mood.rate)
+        setReverb(mood.reverb)
+        setBass(mood.bassDb, 120f)
+        setSpace(mood.width, mood.pan8d, mood.muffle)
+        val v = vinyl.value
+        setVinyl(mood.vinyl?.apply(on = true) ?: v.copy(on = false))
+    }
+
+    val vinyl = MutableStateFlow(VinylSettings())
+
+    fun setVinyl(value: VinylSettings) {
+        vinyl.value = value
+        fx.vinyl = value.on
+        fx.vinylCrackle = value.crackle
+        fx.vinylWarmth = value.warmth
+        fx.vinylWow = value.wow
+        fx.vinylSurface = value.surface
+        saveFx()
+    }
+
     fun resetFx() {
         setSpeed(1f)
         setReverb(0f)
         setRetune(0)
         setBass(0f, 120f)
+        setSpace(1f, 0f, 0f)
+        setVinyl(vinyl.value.copy(on = false))
     }
 
     private fun saveFx() {
@@ -420,6 +565,14 @@ object PlayerHub {
             .putInt("retune", retuneIndex.value)
             .putFloat("bass_gain", bassGain.value)
             .putFloat("bass_freq", bassFreq.value)
+            .putFloat("width", width.value)
+            .putFloat("pan8d", pan8d.value)
+            .putFloat("muffle", muffle.value)
+            .putBoolean("vinyl", vinyl.value.on)
+            .putFloat("vinyl_crackle", vinyl.value.crackle)
+            .putFloat("vinyl_warmth", vinyl.value.warmth)
+            .putFloat("vinyl_wow", vinyl.value.wow)
+            .putFloat("vinyl_surface", vinyl.value.surface)
             .apply()
     }
 
@@ -436,6 +589,20 @@ object PlayerHub {
         fx.bassGainDb = bassGain.value
         fx.bassFreq = bassFreq.value
         rate.value = fx.rate
+        width.value = p.getFloat("width", 1f)
+        pan8d.value = p.getFloat("pan8d", 0f)
+        muffle.value = p.getFloat("muffle", 0f)
+        fx.width = width.value; fx.pan8d = pan8d.value; fx.muffle = muffle.value
+        val d = VinylSettings()
+        setVinyl(
+            VinylSettings(
+                on = p.getBoolean("vinyl", false),
+                crackle = p.getFloat("vinyl_crackle", d.crackle),
+                warmth = p.getFloat("vinyl_warmth", d.warmth),
+                wow = p.getFloat("vinyl_wow", d.wow),
+                surface = p.getFloat("vinyl_surface", d.surface),
+            )
+        )
     }
 
     private const val PREFS = "slowva-fx"

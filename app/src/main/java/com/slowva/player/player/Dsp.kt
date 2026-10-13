@@ -1,6 +1,7 @@
 package com.slowva.player.player
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -20,6 +21,14 @@ class Fx {
     @Volatile var retune = 1.0f         // tuning ratio, multiplies speed
     @Volatile var bassGainDb = 0.0f     // 0 .. 12 dB low shelf
     @Volatile var bassFreq = 120.0f     // 40 .. 320 Hz shelf corner
+    @Volatile var width = 1.0f          // 0 mono .. 1 original .. 2 extra wide
+    @Volatile var pan8d = 0.0f          // 0 .. 1 depth of the circling "8D" pan
+    @Volatile var muffle = 0.0f         // 0 .. 1 "playing in another room" lowpass
+    @Volatile var vinyl = false         // record emulation on/off
+    @Volatile var vinylCrackle = 0.45f  // 0 .. 1 ticks, pops, scratches
+    @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
+    @Volatile var vinylWow = 0.4f       // 0 .. 1 wow and flutter
+    @Volatile var vinylSurface = 0.4f   // 0 .. 1 hiss and rumble
 
     val rate: Float get() = (speed * retune).coerceIn(0.4f, 2.0f)
 }
@@ -109,6 +118,15 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
     private val verbR = Verb(SPREAD)
     private val shelfL = LowShelf()
     private val shelfR = LowShelf()
+    private val vinyl = Vinyl(sampleRate)
+    private val frame = FloatArray(2)
+    private var vinylMix = 0f
+    private val roomL = Biquad()
+    private val roomR = Biquad()
+    private var appliedMuffle = -1f
+    private var panPhase = 0.0
+    private var smoothWidth = 1f
+    private var smoothPan = 0f
 
     /** last 4 input frames, kept across chunks so interpolation never clicks */
     private val hist = Array(2) { FloatArray(4) }
@@ -130,6 +148,20 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
         shelfL.update(fx.bassGainDb, fx.bassFreq, sampleRate)
         shelfR.update(fx.bassGainDb, fx.bassFreq, sampleRate)
         val boosting = fx.bassGainDb > 0.01f
+        val vinylTarget = if (fx.vinyl) 1f else 0f
+        val crackle = fx.vinylCrackle.coerceIn(0f, 1f)
+        val warmth = fx.vinylWarmth.coerceIn(0f, 1f)
+        val wow = fx.vinylWow.coerceIn(0f, 1f)
+        val surface = fx.vinylSurface.coerceIn(0f, 1f)
+        val targetWidth = fx.width.coerceIn(0f, 2f)
+        val targetPan = fx.pan8d.coerceIn(0f, 1f)
+        val muffle = fx.muffle.coerceIn(0f, 1f)
+        if (muffle != appliedMuffle) {
+            // exponential sweep: 18 kHz with the door open, ~350 Hz through a wall
+            val cut = (18000.0 * Math.pow(350.0 / 18000.0, muffle.toDouble())).toFloat()
+            roomL.lowpass(cut, 0.75f, sampleRate); roomR.lowpass(cut, 0.75f, sampleRate)
+            appliedMuffle = muffle
+        }
         val capFrames = out.size / 2 - 2
         var nout = 0
 
@@ -155,6 +187,42 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
                     val w = (if (ch == 0) verbL else verbR).run(dry * 0.015f)
                     var s = dry * (1f - wet * 0.35f) + w * wet
                     if (boosting) s = (if (ch == 0) shelfL else shelfR).run(s)
+                    frame[ch] = s
+                }
+                vinylMix += (vinylTarget - vinylMix) * 0.0005f
+                if (vinylMix > 0.0005f) {
+                    val l = frame[0]; val r = frame[1]
+                    vinyl.run(frame, smoothRate, crackle, warmth, wow, surface)
+                    frame[0] = l + (frame[0] - l) * vinylMix
+                    frame[1] = r + (frame[1] - r) * vinylMix
+                } else if (vinylTarget == 0f) {
+                    vinylMix = 0f
+                }
+                smoothWidth += (targetWidth - smoothWidth) * 0.002f
+                smoothPan += (targetPan - smoothPan) * 0.002f
+                if (abs(smoothWidth - 1f) > 0.002f) {
+                    val mid = (frame[0] + frame[1]) * 0.5f
+                    val side = (frame[0] - frame[1]) * 0.5f * smoothWidth
+                    frame[0] = mid + side; frame[1] = mid - side
+                }
+                if (smoothPan > 0.002f) {
+                    panPhase += PAN_HZ / sampleRate
+                    if (panPhase >= 1.0) panPhase -= 1.0
+                    val pos = sin(2.0 * PI * panPhase).toFloat() * smoothPan
+                    val a = (pos + 1f) * (PI.toFloat() / 4f)
+                    val mono = (frame[0] + frame[1]) * 0.5f
+                    val gl = cos(a.toDouble()).toFloat() * SQRT2
+                    val gr = sin(a.toDouble()).toFloat() * SQRT2
+                    // blend toward a panned mono source as the depth goes up
+                    frame[0] = frame[0] + (mono * gl - frame[0]) * smoothPan
+                    frame[1] = frame[1] + (mono * gr - frame[1]) * smoothPan
+                }
+                if (muffle > 0.001f) {
+                    frame[0] = roomL.run(frame[0]) * (1f + 0.4f * muffle)
+                    frame[1] = roomR.run(frame[1]) * (1f + 0.4f * muffle)
+                }
+                for (ch in 0..1) {
+                    var s = frame[ch]
                     if (s > 1f) s = 1f
                     if (s < -1f) s = -1f
                     out[nout * 2 + ch] = (s * 32767f).toInt().toShort()
@@ -174,7 +242,10 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
         frac = 0.0
         smoothRate = fx.rate
         smoothWet = fx.reverb
+        smoothWidth = fx.width
+        smoothPan = fx.pan8d
         appliedWet = -1f
+        vinylMix = if (fx.vinyl) 1f else 0f
     }
 
     private fun hermite(xm1: Float, x0: Float, x1: Float, x2: Float, t: Float): Float {
@@ -188,5 +259,7 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
     companion object {
         const val SPREAD = 23
         const val MIN_RATE = 0.4f
+        const val PAN_HZ = 0.11
+        val SQRT2 = sqrt(2f)
     }
 }
