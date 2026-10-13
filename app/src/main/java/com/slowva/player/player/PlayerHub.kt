@@ -281,7 +281,7 @@ object PlayerHub {
     fun holdForeground() = startService()
 
     fun releaseForeground() {
-        if (!local.isRunning) app.stopService(Intent(app, PlayerService::class.java))
+        if (!local.isRunning && !fileOn.value && !reverseOn.value) app.stopService(Intent(app, PlayerService::class.java))
     }
 
     private fun startService() {

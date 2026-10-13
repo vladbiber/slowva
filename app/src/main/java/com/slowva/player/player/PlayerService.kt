@@ -6,7 +6,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.IBinder
 import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
@@ -64,6 +66,7 @@ class PlayerService : Service() {
         watchState()
         watchProcess()
         watchWidgets()
+        watchAwake()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,12 +87,49 @@ class PlayerService : Service() {
     }
 
     override fun onDestroy() {
+        holdAwake(cpu = false, net = false)
         scope.cancel()
         session.release()
         PlayerHub.local.stop()
         PlayerHub.localDeviceId.value = null
         SlowvaWidgets.updateAll(this)
         super.onDestroy()
+    }
+
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    // with the screen off Android sleeps the CPU and Wi-Fi, which starves librespot
+    // and the decoders; hold both only while this phone is actually playing
+    private fun watchAwake() = scope.launch {
+        PlayerHub.playback.collect { s ->
+            val here = s?.deviceId != null &&
+                (s.deviceId == PlayerHub.localDeviceId.value || s.deviceId == PlayerHub.LOCAL_FILE_DEVICE)
+            val playing = s?.isPlaying == true && (here || PlayerHub.reverseOn.value)
+            val streaming = playing && s?.deviceId != PlayerHub.LOCAL_FILE_DEVICE
+            holdAwake(cpu = playing, net = streaming)
+        }
+    }
+
+    private fun holdAwake(cpu: Boolean, net: Boolean) {
+        if (cpu && wakeLock == null) {
+            wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "slowva:playback")
+                .apply { setReferenceCounted(false); acquire() }
+        } else if (!cpu) {
+            wakeLock?.takeIf { it.isHeld }?.release()
+            wakeLock = null
+        }
+        if (net && wifiLock == null) {
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            else @Suppress("DEPRECATION") WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            wifiLock = (applicationContext.getSystemService(WIFI_SERVICE) as WifiManager)
+                .createWifiLock(mode, "slowva:stream")
+                .apply { setReferenceCounted(false); acquire() }
+        } else if (!net) {
+            wifiLock?.takeIf { it.isHeld }?.release()
+            wifiLock = null
+        }
     }
 
     private fun watchState() = scope.launch {
