@@ -8,6 +8,7 @@ import com.slowva.player.api.Playlist
 import com.slowva.player.api.Source
 import com.slowva.player.api.Track
 import com.slowva.player.auth.Auth
+import com.slowva.player.player.LocalLibrary
 import com.slowva.player.player.PlayerHub
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -155,11 +156,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         albums.value = emptyList()
     }
 
-    /**
-     * Two requests, not sixteen: liked songs are fetched when that row is
-     * opened. The Web API rate limit is shared with every other librespot
-     * client on the planet, so every avoidable call is worth avoiding.
-     */
+    /** Liked songs load lazily; the shared Web API quota is tight. */
     fun loadLibrary() = viewModelScope.launch {
         busy.value = true
         runCatching {
@@ -182,6 +179,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 is Source.OfPlaylist -> PlayerHub.api.playlistTracks(source.playlist.id)
                 is Source.OfAlbum -> PlayerHub.api.albumTracks(source.album)
                 is Source.SearchResults -> searchTracks.value
+                is Source.Local -> LocalLibrary.tracks.value
             }
         }.onFailure {
             val detail = it.message?.take(160) ?: "unknown Spotify error"
@@ -208,6 +206,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             .onFailure { PlayerHub.say("search: ${it.message?.take(120)}") }
         busy.value = false
+    }
+
+    fun addLocalFolder(uri: android.net.Uri) = viewModelScope.launch {
+        LocalLibrary.addFolder(ctx, uri); LocalLibrary.scan(ctx); refreshLocal()
+    }
+
+    fun addLocalFiles(uris: List<android.net.Uri>) = viewModelScope.launch {
+        LocalLibrary.addFiles(ctx, uris); LocalLibrary.scan(ctx); refreshLocal()
+    }
+
+    fun clearLocal() { LocalLibrary.clear(ctx); refreshLocal() }
+
+    private fun refreshLocal() {
+        if (openSource.value is Source.Local) openTracks.value = LocalLibrary.tracks.value
     }
 
     /** Plays a list, using the playlist/album context when we have one. */

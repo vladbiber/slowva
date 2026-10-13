@@ -128,7 +128,7 @@ fun rememberLiveProgress(): LiveProgress {
     val reversed by PlayerHub.reverseOn.collectAsState()
     live.speed = when {
         reversed -> -rate
-        localId != null && s?.deviceId == localId -> rate
+        (localId != null && s?.deviceId == localId) || s?.deviceId == PlayerHub.LOCAL_FILE_DEVICE -> rate
         else -> 1f
     }
     LaunchedEffect(s?.progressMs, s?.isPlaying, s?.track?.id) {
@@ -237,11 +237,7 @@ private fun dominantPastel(bmp: Bitmap): Color? {
     return Color(ColorUtils.HSLToColor(floatArrayOf(hue, 0.55f, 0.76f)))
 }
 
-/**
- * The thin slider from the reference: a hairline track, accent fill and a
- * small upright bar as the thumb. [onChange] fires while dragging,
- * [onDone] once on release.
- */
+/** Thin slider: hairline track and an upright bar thumb. [onDone] fires on release. */
 @Composable
 fun PillSlider(
     value: Float,
@@ -298,11 +294,7 @@ fun PillSlider(
 
 const val TAU = (2 * PI).toFloat()
 
-/**
- * TalkBack view of a playback stage drawn on a Canvas: what it is, where the
- * track is, double-tap to play/pause, swipe up/down (adjust) to seek, plus
- * named actions for the extra controls a skin has.
- */
+/** TalkBack semantics for a Canvas stage: play/pause on click, seek via adjust and custom actions. */
 fun Modifier.stageSemantics(
     what: String,
     live: LiveProgress,

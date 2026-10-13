@@ -1,6 +1,8 @@
 package com.slowva.player.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
@@ -49,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,6 +86,7 @@ import com.slowva.player.api.Album
 import com.slowva.player.api.Playlist
 import com.slowva.player.api.Source
 import com.slowva.player.api.Track
+import com.slowva.player.player.LocalLibrary
 import com.slowva.player.player.PlayerHub
 
 @Composable
@@ -119,6 +126,12 @@ fun LibraryScreen(vm: AppViewModel) {
         }
         full {
             LikedCard(if (liked.isEmpty()) "Your saved tracks" else "${liked.size} tracks") { vm.open(Source.Liked) }
+        }
+        full {
+            val local by LocalLibrary.tracks.collectAsState()
+            LocalCard(if (local.isEmpty()) "Add music from this phone" else "${local.size} tracks on this phone") {
+                vm.open(Source.Local)
+            }
         }
         if (playlists.isNotEmpty()) {
             full { SectionHeader("Playlists") }
@@ -185,6 +198,30 @@ private fun LikedCard(subtitle: String, onClick: () -> Unit) {
 }
 
 @Composable
+private fun LocalCard(subtitle: String, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(c.surfaceVariant)
+            .clickable(role = Role.Button, onClickLabel = "open", onClick = onClick)
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(c.primary.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Default.Folder, contentDescription = null, tint = c.primary) }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Local files", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, fontSize = 13.sp, color = c.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
 private fun PlaylistCard(p: Playlist, onClick: () -> Unit) =
     MediaCard(p.name, p.owner, p.art, Icons.AutoMirrored.Filled.PlaylistPlay, "Playlist", onClick)
 
@@ -244,6 +281,17 @@ private fun TrackListScreen(vm: AppViewModel, source: Source) {
         is Source.OfAlbum -> "Album · ${source.album.artist}"
         is Source.Liked -> "Your liked songs"
         is Source.SearchResults -> "Search"
+        is Source.Local -> "Music on this phone"
+    }
+    val isLocal = source is Source.Local
+    val localTracks by LocalLibrary.tracks.collectAsState()
+    val scanning by LocalLibrary.scanning.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(localTracks, isLocal) { if (isLocal) vm.open(Source.Local) }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let { vm.addLocalFolder(it) }
+    }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.addLocalFiles(uris)
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -255,7 +303,11 @@ private fun TrackListScreen(vm: AppViewModel, source: Source) {
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Cover(
-                    art, if (source is Source.Liked) Icons.Default.Favorite else Icons.Default.Album,
+                    art, when (source) {
+                        is Source.Liked -> Icons.Default.Favorite
+                        is Source.Local -> Icons.Default.Folder
+                        else -> Icons.Default.Album
+                    },
                     Modifier.size(180.dp), 18.dp,
                 )
                 Spacer(Modifier.height(16.dp))
@@ -282,6 +334,29 @@ private fun TrackListScreen(vm: AppViewModel, source: Source) {
                     ) {
                         Icon(Icons.Default.Shuffle, contentDescription = null)
                         Spacer(Modifier.width(6.dp)); Text("Shuffle")
+                    }
+                }
+                if (isLocal) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { pickFolder.launch(null) }) {
+                            Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp)); Text("Add folder")
+                        }
+                        OutlinedButton(onClick = { pickFiles.launch(arrayOf("audio/*")) }) {
+                            Icon(Icons.Default.AudioFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp)); Text("Add files")
+                        }
+                    }
+                    if (scanning) Text("Reading tags…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (localTracks.isNotEmpty()) {
+                        TextButton(onClick = { vm.clearLocal() }) { Text("Forget all local music") }
+                    } else if (!scanning) {
+                        Text(
+                            "Pick a folder (for example Music or Download) or single files. Slowva only reads what you pick.",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
                     }
                 }
                 Spacer(Modifier.height(12.dp))

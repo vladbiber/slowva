@@ -92,7 +92,7 @@ private fun ConnectionCard() {
     val connecting by PlayerHub.connecting.collectAsState()
     val pairing by PlayerHub.pairing.collectAsState()
     val devices by PlayerHub.devices.collectAsState()
-    val onLocal = localId != null && playback?.deviceId == localId
+    val onLocal = (localId != null && playback?.deviceId == localId) || playback?.deviceId == PlayerHub.LOCAL_FILE_DEVICE
     val ok = MaterialTheme.colorScheme.primary
 
     Surface(

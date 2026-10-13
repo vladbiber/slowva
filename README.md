@@ -28,6 +28,8 @@ locally on the phone.
   by [@yappologistic](https://github.com/yappologistic)
 - **Real vinyl sound**: crackle, pops, scratches, wow & flutter, warmth, hiss
 - **Reverse mode**: whole tracks played from the last second to the first
+- **Local files**: add folders or single files from the phone, played through the same effects
+- calm **rain** sounds (drizzle, rain, storm) mixed on top of the music
 - **8D rotation**, stereo width and an "another room" muffle effect
 - one-tap presets: Slowed + reverb, Daycore, Nightcore, Lo-fi record and more
 - arm64 phone and x86_64 emulator builds
@@ -37,14 +39,14 @@ Spotify Premium is required for Development Mode and local playback.
 ## Install the APK
 
 Download the ready-made Android 8.0+ arm64 APK from the
-[Slowva 1.9.2 release](https://github.com/vladbiber/slowva/releases/tag/1.9.2),
+[Slowva 2.0.1 release](https://github.com/vladbiber/slowva/releases/tag/2.0.1),
 or use the direct link:
 
-[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/1.9.2/Slowva-arm64-v8a.apk)
+[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/2.0.1/Slowva-arm64-v8a.apk)
 
 This build is intended for modern arm64 Android phones, including Samsung
 devices. Android may ask you to allow installation from your browser or file
-manager. SHA-256: `36c13dbc5be9f32113e850495fc36d145ea27a571d57a448161742a3fb63036b`.
+manager. SHA-256: `d6fba21ba7cbf4796b9de141e736eb2d55ad0159464f2c9b517812a789cf6ff5`.
 
 ## One-time Spotify setup
 

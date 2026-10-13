@@ -18,7 +18,7 @@ import kotlin.math.abs
 
 /**
  * A slider with a tick where the default sits, and a small magnet that snaps
- * onto it — otherwise getting back to exactly 1.00x by dragging is luck.
+ * onto it, otherwise getting back to exactly 1.00x by dragging is luck.
  */
 @Composable
 fun MarkedSlider(

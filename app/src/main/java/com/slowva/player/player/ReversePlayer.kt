@@ -16,11 +16,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.TimeUnit
 
-/**
- * Exact reverse, like spotc: the whole track is decoded to a PCM file first
- * (it needs the future before it can play the past), then read from its last
- * frame to its first through the same effect chain as normal playback.
- */
+/** Reverse playback: decode the whole track to PCM, then read it back to front through the same Dsp. */
 class ReversePlayer(private val ctx: Context, private val fx: Fx) {
 
     data class State(
@@ -39,6 +35,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
     @Volatile private var paused = false
     @Volatile private var seekFrame = -1L
     @Volatile var volume = 1f
+    @Volatile private var rate = RATE
 
     private val dir get() = File(ctx.cacheDir, "reverse").apply { mkdirs() }
 
@@ -86,6 +83,23 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
         Result.success(out)
     }
 
+    /** Local files decode on the phone; returns the PCM file and its sample rate. */
+    suspend fun decodeLocal(track: Track): Result<Pair<File, Int>> {
+        val name = track.id.filter { it.isLetterOrDigit() }
+        val out = File(dir, "$name.s16")
+        val rateFile = File(dir, "$name.rate")
+        val known = rateFile.takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
+        if (out.length() > 0 && known != null) {
+            out.setLastModified(System.currentTimeMillis())
+            return Result.success(out to known)
+        }
+        return FilePlayer.decodeAll(ctx, track, out).map { sr ->
+            rateFile.writeText(sr.toString())
+            prune()
+            out to sr
+        }
+    }
+
     /** about 10 MB per minute of audio, so only the last few tracks stay */
     private fun prune() {
         dir.listFiles { f -> f.name.endsWith(".s16") }
@@ -95,14 +109,15 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
     }
 
     @Synchronized
-    fun start(track: Track, file: File, fromMs: Long? = null) {
+    fun start(track: Track, file: File, fromMs: Long? = null, sampleRate: Int = RATE.toInt()) {
         stop()
+        rate = sampleRate.toLong()
         val run = ++generation
         paused = false
         val total = file.length() / 4
-        val from = fromMs?.let { it * RATE / 1000 } ?: total
+        val from = fromMs?.let { it * rate / 1000 } ?: total
         seekFrame = from.coerceIn(0, total)
-        state.value = State(track, false, true, seekFrame * 1000 / RATE, total * 1000 / RATE)
+        state.value = State(track, false, true, seekFrame * 1000 / rate, total * 1000 / rate)
         Thread({ pump(file, run) }, "slowva-reverse").apply { isDaemon = true; start() }
     }
 
@@ -112,7 +127,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
     }
 
     fun seek(ms: Long) {
-        seekFrame = (ms.coerceAtLeast(0) * RATE / 1000)
+        seekFrame = (ms.coerceAtLeast(0) * rate / 1000)
         state.value = state.value?.copy(positionMs = ms.coerceAtLeast(0))
     }
 
@@ -125,10 +140,10 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
     @SuppressLint("MissingPermission")
     private fun pump(file: File, run: Int) {
         AndroidProcess.setThreadPriority(AndroidProcess.THREAD_PRIORITY_URGENT_AUDIO)
-        val dsp = Dsp(fx)
+        val dsp = Dsp(fx, rate.toFloat())
         dsp.reset()
-        val analyzer = SpectrumAnalyzer()
-        val minBuf = AudioTrack.getMinBufferSize(RATE.toInt(), AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
+        val analyzer = SpectrumAnalyzer(sampleRate = rate.toInt())
+        val minBuf = AudioTrack.getMinBufferSize(rate.toInt(), AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
         val out = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -139,7 +154,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(RATE.toInt())
+                    .setSampleRate(rate.toInt())
                     .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                     .build()
             )
@@ -196,7 +211,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastUi > 200 && run == generation) {
                         lastUi = now
-                        state.value = state.value?.copy(positionMs = pos * 1000 / RATE, playing = true)
+                        state.value = state.value?.copy(positionMs = pos * 1000 / rate, playing = true)
                         onSpectrum?.invoke(analyzer.analyze(outShorts, n))
                     }
                 }

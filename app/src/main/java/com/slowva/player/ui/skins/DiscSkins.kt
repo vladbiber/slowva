@@ -78,12 +78,7 @@ private class Geo(val c: Offset, val r: Float) {
 
 private fun geoFor(size: Size) = Geo(Offset(size.width * 0.47f, size.height * 0.5f), size.width * 0.43f)
 
-/**
- * The record / CD stage: a spinning disc you can grab and scratch (seeks by
- * the angle you turned it), a wavy audio-reactive progress line around its
- * right edge you can drag along, tap to play/pause and, for vinyl, a tonearm
- * that follows the groove and can be lifted and dropped anywhere.
- */
+/** Spinning disc stage: scratch to seek, drag the progress arc, tap to play/pause, tonearm for vinyl. */
 @Composable
 private fun DiscStage(
     live: LiveProgress,

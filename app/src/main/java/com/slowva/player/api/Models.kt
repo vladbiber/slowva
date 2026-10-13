@@ -48,6 +48,7 @@ data class PlaybackState(
 /** A named source of tracks in the library screen. */
 sealed class Source(val title: String) {
     object Liked : Source("Liked songs")
+    object Local : Source("Local files")
     data class OfPlaylist(val playlist: Playlist) : Source(playlist.name)
     data class OfAlbum(val album: Album) : Source(album.name)
     data class SearchResults(val query: String) : Source("Search")

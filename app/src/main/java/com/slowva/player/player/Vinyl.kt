@@ -46,15 +46,7 @@ internal class Biquad {
     }
 }
 
-/**
- * Makes clean digital audio sound like it comes off a record: wow and flutter
- * locked to the platter speed, groove rolloff and soft tube-ish saturation,
- * mono bass like a cutting lathe, surface hiss, motor rumble, random crackle
- * and a couple of scratches that tick once per revolution.
- *
- * Works per output frame, after resampling, so the platter turns slower when
- * the track is slowed down, the way a real turntable at a lower speed would.
- */
+/** Record emulation: wow/flutter tied to platter speed, rolloff, saturation, mono bass, hiss, rumble, crackle. */
 internal class Vinyl(private val sr: Float) {
 
     private val delayL = FloatArray(DELAY_LEN)

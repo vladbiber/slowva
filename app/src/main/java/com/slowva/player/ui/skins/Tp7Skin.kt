@@ -66,11 +66,7 @@ private object L {
     val buttons = Rect(0.06f, 0.73f, 0.68f, 0.88f)
 }
 
-/**
- * A Teenage Engineering TP-7 style recorder. The platter is a jog wheel, the
- * side lever is the slow fader, the knurled knob is reverb, and the screen
- * shows whatever you are touching.
- */
+/** TP-7 style device: jog wheel seeks, lever is slow, knurled knob is reverb. */
 @Composable
 fun Tp7Skin(live: LiveProgress, art: Painter, accent: Color, title: String, modifier: Modifier = Modifier) {
     val rate by PlayerHub.rate.collectAsState()

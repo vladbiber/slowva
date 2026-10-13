@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.slowva.player.player.Mood
 import com.slowva.player.player.PlayerHub
 import com.slowva.player.player.RETUNE_PRESETS
+import com.slowva.player.player.RainPreset
 import com.slowva.player.player.SLOW_STEPS
 import kotlin.math.abs
 import kotlin.math.ln
@@ -151,6 +153,23 @@ fun SoundPanel(modifier: Modifier = Modifier) {
                     modifier = Modifier.semantics { contentDescription = "Reverse mode" },
                 )
             }
+        }
+
+        val rain by PlayerHub.rain.collectAsState()
+        val rainLevel by PlayerHub.rainLevel.collectAsState()
+        Section(Icons.Default.WaterDrop, "Rain", rain.label.lowercase()) {
+            ChipRow {
+                RainPreset.entries.forEach { p ->
+                    FilterChip(selected = rain == p, onClick = { PlayerHub.setRain(p) }, label = { Text(p.label) })
+                }
+            }
+            FxSlider("Rain volume", "${(rainLevel * 100).roundToInt()}%", rainLevel, 0f..1.5f, 1f, enabled = rain != RainPreset.OFF) {
+                PlayerHub.setRain(rain, it)
+            }
+            Text(
+                "Generated live, mixed on top of the music and never slowed down.",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Section(Icons.Default.Album, "Vinyl", if (vinyl.on) "on" else "off") {

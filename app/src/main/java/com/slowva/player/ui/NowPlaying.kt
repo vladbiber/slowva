@@ -99,6 +99,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.WaterDrop
+import com.slowva.player.player.RainPreset
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.semantics.Role
@@ -125,7 +127,7 @@ fun PlayerContent(onClose: () -> Unit) {
     val accent = rememberArtAccent(track?.art)
     val art = rememberArtPainter(track?.art)
     val live = rememberLiveProgress()
-    val onPhone = localId != null && state?.deviceId == localId
+    val onPhone = (localId != null && state?.deviceId == localId) || state?.deviceId == PlayerHub.LOCAL_FILE_DEVICE
 
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
@@ -267,6 +269,7 @@ private fun SoundStrip(accent: Color, onOpen: () -> Unit) {
     val pan by PlayerHub.pan8d.collectAsState()
     val muffle by PlayerHub.muffle.collectAsState()
     val v by PlayerHub.vinyl.collectAsState()
+    val rain by PlayerHub.rain.collectAsState()
     val reversed by PlayerHub.reverseOn.collectAsState()
     val rev by PlayerHub.reverseState.collectAsState()
     Row(
@@ -276,6 +279,10 @@ private fun SoundStrip(accent: Color, onOpen: () -> Unit) {
     ) {
         StripChip("Sound", Icons.Default.Tune, true, accent, description = "Sound settings", onClick = onOpen)
         StripChip("Vinyl", Icons.Default.Album, v.on, accent, toggle = true) { PlayerHub.setVinyl(v.copy(on = !v.on)) }
+        StripChip(
+            if (rain == RainPreset.OFF) "Rain" else rain.label, Icons.Default.WaterDrop,
+            rain != RainPreset.OFF, accent, toggle = true, description = "Rain sounds",
+        ) { PlayerHub.toggleRain() }
         StripChip(
             if (rev?.preparing == true) "Reverse: decoding…" else "Reverse",
             Icons.Default.FastRewind, reversed, accent, toggle = true,

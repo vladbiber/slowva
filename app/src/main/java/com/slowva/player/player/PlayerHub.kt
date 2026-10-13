@@ -34,6 +34,10 @@ object PlayerHub {
         private set
     private val noReverse = MutableStateFlow<ReversePlayer.State?>(null)
     val reverseState: StateFlow<ReversePlayer.State?> get() = if (::reverse.isInitialized) reverse.state else noReverse
+    lateinit var files: FilePlayer
+        private set
+    /** a local file is the current track (playing or paused) */
+    val fileOn = MutableStateFlow(false)
     /** reverse mode is on; it stays on across tracks until switched off */
     val reverseOn = MutableStateFlow(false)
     private var queue: List<Track> = emptyList()
@@ -61,6 +65,12 @@ object PlayerHub {
         app = context.applicationContext
         api = Spotify(app)
         local = LocalPlayer(app, fx)
+        files = FilePlayer(app, fx).apply {
+            onSpectrum = { local.spectrum.value = it }
+            onFinished = { scope.launch { fileStep(+1, auto = true) } }
+        }
+        scope.launch { LocalLibrary.scan(app) }
+        scope.launch { files.state.collect { if (fileOn.value && !reverseOn.value) mirrorFile() } }
         reverse = ReversePlayer(app, fx).apply {
             onSpectrum = { local.spectrum.value = it }
             onFinished = { scope.launch { reverseStep(+1) } }
@@ -76,11 +86,7 @@ object PlayerHub {
 
     // ---- the local device ----------------------------------------------
 
-    /**
-     * Publishes slowva on Spotify Connect as soon as the app opens. With no
-     * cached player credentials, librespot remains in Zeroconf pairing mode;
-     * with credentials, it also registers the receiver with Spotify.
-     */
+    /** Starts librespot so slowva shows up in Spotify Connect (Zeroconf until credentials exist). */
     fun startDiscoverable() {
         scope.launch {
             startService()
@@ -237,11 +243,7 @@ object PlayerHub {
         }
     }
 
-    /**
-     * Waits for librespot to cache its credentials. Everything after this point
-     * can mint session tokens, which are not throttled the way the shared
-     * desktop client id is.
-     */
+    /** Waits until librespot has cached credentials, which session tokens need. */
     suspend fun awaitCredentials(timeoutMs: Long = 25_000): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
@@ -275,11 +277,7 @@ object PlayerHub {
         return null
     }
 
-    /**
-     * Keeps the process out of Android's cached (freezable) state — the browser
-     * sign-in needs us to keep accept()ing on the loopback socket while the
-     * browser is in front.
-     */
+    /** Keeps the process from being frozen while the browser sign-in waits on the loopback socket. */
     fun holdForeground() = startService()
 
     fun releaseForeground() {
@@ -314,6 +312,12 @@ object PlayerHub {
             scope.launch { tracks.getOrNull(index)?.let { launchReverse(it) } }
             return
         }
+        val pick = tracks.getOrNull(index)
+        if (LocalLibrary.isLocal(pick)) {
+            scope.launch { playFile(pick!!) }
+            return
+        }
+        if (fileOn.value) { files.stop(); fileOn.value = false }
         scope.launch {
             val device = ensureLocal(transferPlayback = false)
             if (device == null) return@launch
@@ -340,6 +344,13 @@ object PlayerHub {
             mirrorReverse()
             return@launch
         }
+        if (fileOn.value) {
+            val st = files.state.value
+            if (st == null) playback.value?.track?.let { playFile(it) }
+            else files.setPaused(st.playing)
+            mirrorFile()
+            return@launch
+        }
         runCatching {
             val state = playback.value
             if (state?.isPlaying == true) {
@@ -353,9 +364,81 @@ object PlayerHub {
         refresh()
     }
 
-    fun next() { if (reverseOn.value) scope.launch { reverseStep(+1) } else call("next") { api.next() } }
-    fun previous() { if (reverseOn.value) scope.launch { reverseStep(-1) } else call("prev") { api.previous() } }
-    fun seek(ms: Int) { if (reverseOn.value) { reverse.seek(ms.toLong()); mirrorReverse() } else call("seek") { api.seek(ms) } }
+    fun next() {
+        when {
+            reverseOn.value -> scope.launch { reverseStep(+1) }
+            fileOn.value -> scope.launch { fileStep(+1) }
+            else -> call("next") { api.next() }
+        }
+    }
+    fun previous() {
+        when {
+            reverseOn.value -> scope.launch { reverseStep(-1) }
+            fileOn.value -> scope.launch {
+                // like every player: restart the track unless it just began
+                val pos = files.state.value?.positionMs ?: 0
+                if (pos > 3000) { files.seek(0); mirrorFile() } else fileStep(-1)
+            }
+            else -> call("prev") { api.previous() }
+        }
+    }
+    fun seek(ms: Int) {
+        when {
+            reverseOn.value -> { reverse.seek(ms.toLong()); mirrorReverse() }
+            fileOn.value -> { files.seek(ms.toLong()); mirrorFile() }
+            else -> call("seek") { api.seek(ms) }
+        }
+    }
+
+    // ---- local files -----------------------------------------------------
+
+    private suspend fun playFile(track: Track, fromMs: Long = 0) {
+        val st = playback.value
+        if (!fileOn.value && st?.isPlaying == true && !LocalLibrary.isLocal(st.track)) runCatching { api.pause() }
+        fileOn.value = true
+        holdForeground()
+        val i = queue.indexOfFirst { it.id == track.id }
+        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0 }
+        files.volume = 1f
+        files.start(track, fromMs)
+        mirrorFile()
+    }
+
+    private suspend fun fileStep(dir: Int, auto: Boolean = false) {
+        val st = playback.value
+        val repeat = st?.repeat ?: "off"
+        if (auto && repeat == "track") { queue.getOrNull(queueIndex)?.let { playFile(it) }; return }
+        var next = if (st?.shuffle == true && queue.size > 1) {
+            var r: Int
+            do { r = queue.indices.random() } while (r == queueIndex)
+            r
+        } else queueIndex + dir
+        if (next !in queue.indices) {
+            if (repeat == "context" && queue.isNotEmpty()) next = if (dir > 0) 0 else queue.lastIndex
+            else {
+                if (auto) { files.stop(); playback.value = playback.value?.copy(isPlaying = false, progressMs = 0) }
+                return
+            }
+        }
+        val track = queue.getOrNull(next) ?: return
+        if (!LocalLibrary.isLocal(track)) return
+        queueIndex = next
+        playFile(track)
+    }
+
+    /** Shuffle and repeat for local files live here, Spotify keeps its own. */
+    private var fileShuffle = false
+    private var fileRepeat = "off"
+
+    private fun mirrorFile() {
+        val f = files.state.value ?: return
+        playback.value = PlaybackState(
+            f.track, f.playing, f.positionMs.toInt(), LOCAL_FILE_DEVICE, "this phone",
+            fileShuffle, fileRepeat, 100,
+        )
+    }
+
+    const val LOCAL_FILE_DEVICE = "slowva-local-file"
 
     // ---- reverse mode ----------------------------------------------------
 
@@ -364,6 +447,13 @@ object PlayerHub {
     private suspend fun enterReverse() {
         val st = playback.value
         val track = st?.track ?: run { say("start a track before using reverse"); return }
+        if (LocalLibrary.isLocal(track)) {
+            reverseOn.value = true
+            val from = files.state.value?.positionMs
+            files.stop()
+            launchReverse(track, from)
+            return
+        }
         if (!SessionToken.available(app)) {
             say("reverse needs the phone paired once (Play here), so it can decode tracks")
             return
@@ -376,10 +466,25 @@ object PlayerHub {
         launchReverse(track)
     }
 
-    private suspend fun launchReverse(track: Track) {
+    private suspend fun launchReverse(track: Track, fromMs: Long? = null) {
         reverse.preparing(track)
         mirrorReverse()
         say("reverse: decoding ${track.name}…")
+        if (LocalLibrary.isLocal(track)) {
+            reverse.volume = 1f
+            reverse.decodeLocal(track)
+                .onSuccess { (file, sr) ->
+                    if (!reverseOn.value) return
+                    reverse.start(track, file, fromMs?.takeIf { it > 0 }, sr)
+                    mirrorReverse()
+                    say("reverse: end → beginning")
+                }
+                .onFailure {
+                    say("reverse failed: ${it.message?.take(140)}")
+                    leaveReverse(resume = false)
+                }
+            return
+        }
         reverse.volume = (playback.value?.volumePercent ?: 100) / 100f
         reverse.decode(track)
             .onSuccess { file ->
@@ -411,6 +516,10 @@ object PlayerHub {
         val st = reverse.state.value
         reverse.stop()
         reverseOn.value = false
+        if (st != null && LocalLibrary.isLocal(st.track)) {
+            if (resume && !st.preparing) playFile(st.track, st.positionMs) else fileOn.value = false
+            return
+        }
         releaseForeground()
         if (resume && st != null && !st.preparing) {
             val device = ensureLocal(transferPlayback = false) ?: return
@@ -432,8 +541,18 @@ object PlayerHub {
         )
     }
     fun setVolume(percent: Int) = call("volume") { api.setVolume(percent) }
-    fun toggleShuffle() = call("shuffle") { api.setShuffle(!(playback.value?.shuffle ?: false)) }
-    fun cycleRepeat() = call("repeat") {
+    fun toggleShuffle() {
+        if (fileOn.value) { fileShuffle = !fileShuffle; mirrorFile(); return }
+        call("shuffle") { api.setShuffle(!(playback.value?.shuffle ?: false)) }
+    }
+    fun cycleRepeat() {
+        if (fileOn.value) {
+            fileRepeat = when (fileRepeat) { "off" -> "context"; "context" -> "track"; else -> "off" }
+            mirrorFile(); return
+        }
+        spotifyRepeat()
+    }
+    private fun spotifyRepeat() = call("repeat") {
         val next = when (playback.value?.repeat) {
             "off" -> "context"
             "context" -> "track"
@@ -449,6 +568,7 @@ object PlayerHub {
     }
 
     suspend fun refresh() {
+        if (fileOn.value && !reverseOn.value) { mirrorFile(); return }
         runCatching { api.state() }.onSuccess {
             playback.value = it
             if (reverseOn.value) {
@@ -536,6 +656,20 @@ object PlayerHub {
         setVinyl(mood.vinyl?.apply(on = true) ?: v.copy(on = false))
     }
 
+    val rain = MutableStateFlow(RainPreset.OFF)
+    val rainLevel = MutableStateFlow(1f)
+    /** what the rain chip turns back on */
+    private var lastRain = RainPreset.RAIN
+
+    fun setRain(preset: RainPreset, level: Float = rainLevel.value) {
+        if (preset != RainPreset.OFF) lastRain = preset
+        rain.value = preset; rainLevel.value = level
+        fx.rain = preset; fx.rainLevel = level
+        saveFx()
+    }
+
+    fun toggleRain() = setRain(if (rain.value == RainPreset.OFF) lastRain else RainPreset.OFF)
+
     val vinyl = MutableStateFlow(VinylSettings())
 
     fun setVinyl(value: VinylSettings) {
@@ -555,6 +689,7 @@ object PlayerHub {
         setBass(0f, 120f)
         setSpace(1f, 0f, 0f)
         setVinyl(vinyl.value.copy(on = false))
+        setRain(RainPreset.OFF)
     }
 
     private fun saveFx() {
@@ -568,6 +703,8 @@ object PlayerHub {
             .putFloat("width", width.value)
             .putFloat("pan8d", pan8d.value)
             .putFloat("muffle", muffle.value)
+            .putString("rain", rain.value.name)
+            .putFloat("rain_level", rainLevel.value)
             .putBoolean("vinyl", vinyl.value.on)
             .putFloat("vinyl_crackle", vinyl.value.crackle)
             .putFloat("vinyl_warmth", vinyl.value.warmth)
@@ -593,6 +730,10 @@ object PlayerHub {
         pan8d.value = p.getFloat("pan8d", 0f)
         muffle.value = p.getFloat("muffle", 0f)
         fx.width = width.value; fx.pan8d = pan8d.value; fx.muffle = muffle.value
+        rain.value = runCatching { RainPreset.valueOf(p.getString("rain", "OFF")!!) }.getOrDefault(RainPreset.OFF)
+        rainLevel.value = p.getFloat("rain_level", 1f)
+        fx.rain = rain.value; fx.rainLevel = rainLevel.value
+        if (rain.value != RainPreset.OFF) lastRain = rain.value
         val d = VinylSettings()
         setVinyl(
             VinylSettings(

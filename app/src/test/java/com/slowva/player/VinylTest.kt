@@ -123,3 +123,25 @@ class SpaceTest {
         assertTrue("8 kHz still at $peak", peak < 1200)
     }
 }
+
+class RainTest {
+    @Test
+    fun `rain fills silence without clipping`() {
+        for (preset in listOf(com.slowva.player.player.RainPreset.DRIZZLE, com.slowva.player.player.RainPreset.STORM)) {
+            val dsp = Dsp(Fx().apply { rain = preset }); dsp.reset()
+            val input = ShortArray(4096 * 2)
+            val out = ShortArray(dsp.maxOutFrames(4096) * 2)
+            var e = 0.0; var count = 0; var peak = 0
+            repeat(60) {
+                val n = dsp.process(input, 4096, out)
+                for (i in 0 until n * 2) { e += out[i].toDouble() * out[i]; peak = maxOf(peak, kotlin.math.abs(out[i].toInt())) }
+                count += n * 2
+            }
+            val rms = kotlin.math.sqrt(e / count)
+            println("$preset rms=$rms peak=$peak")
+            assertTrue("$preset too quiet $rms", rms > 100)
+            assertTrue("$preset too loud $rms", rms < 4000)
+            assertTrue(peak < 32767)
+        }
+    }
+}

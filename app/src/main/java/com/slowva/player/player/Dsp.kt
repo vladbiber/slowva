@@ -8,12 +8,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * The effect chain, ported from spotc-fx: a 4-point cubic Hermite resampler
- * (so pitch drops together with speed, the way slowed audio actually sounds)
- * followed by a Freeverb, plus a low-shelf bass boost.
- *
- * Input and output are both interleaved stereo s16le at 44100 Hz. Slowing down
- * produces MORE output frames than input frames — the sink rate never changes.
+ * Effect chain ported from spotc-fx: cubic Hermite resampler (pitch follows speed),
+ * Freeverb, low shelf. Stereo s16le in and out; slowing down yields more output frames.
  */
 class Fx {
     @Volatile var speed = 1.0f          // 0.4 .. 1.5, 1.0 = original tempo
@@ -24,6 +20,8 @@ class Fx {
     @Volatile var width = 1.0f          // 0 mono .. 1 original .. 2 extra wide
     @Volatile var pan8d = 0.0f          // 0 .. 1 depth of the circling "8D" pan
     @Volatile var muffle = 0.0f         // 0 .. 1 "playing in another room" lowpass
+    @Volatile var rain = RainPreset.OFF
+    @Volatile var rainLevel = 1.0f       // 0 .. 1.5 on top of the preset
     @Volatile var vinyl = false         // record emulation on/off
     @Volatile var vinylCrackle = 0.45f  // 0 .. 1 ticks, pops, scratches
     @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
@@ -121,6 +119,10 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
     private val vinyl = Vinyl(sampleRate)
     private val frame = FloatArray(2)
     private var vinylMix = 0f
+    private val rainFx = Rain(sampleRate)
+    private val rainFrame = FloatArray(2)
+    private var rainMix = 0f
+    private var rainPreset = RainPreset.OFF
     private val roomL = Biquad()
     private val roomR = Biquad()
     private var appliedMuffle = -1f
@@ -156,6 +158,8 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
         val targetWidth = fx.width.coerceIn(0f, 2f)
         val targetPan = fx.pan8d.coerceIn(0f, 1f)
         val muffle = fx.muffle.coerceIn(0f, 1f)
+        val rainWant = fx.rain
+        val rainLevel = fx.rainLevel.coerceIn(0f, 1.5f)
         if (muffle != appliedMuffle) {
             // exponential sweep: 18 kHz with the door open, ~350 Hz through a wall
             val cut = (18000.0 * Math.pow(350.0 / 18000.0, muffle.toDouble())).toFloat()
@@ -221,6 +225,16 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
                     frame[0] = roomL.run(frame[0]) * (1f + 0.4f * muffle)
                     frame[1] = roomR.run(frame[1]) * (1f + 0.4f * muffle)
                 }
+                if (rainWant != RainPreset.OFF) rainPreset = rainWant
+                rainMix += ((if (rainWant != RainPreset.OFF) rainLevel else 0f) - rainMix) * 0.0003f
+                if (rainMix > 0.0005f && rainPreset != RainPreset.OFF) {
+                    rainFrame[0] = 0f; rainFrame[1] = 0f
+                    rainFx.run(rainFrame, rainPreset)
+                    frame[0] += rainFrame[0] * rainMix
+                    frame[1] += rainFrame[1] * rainMix
+                    // soft knee so music plus a storm never hard-clips
+                    frame[0] = softClip(frame[0]); frame[1] = softClip(frame[1])
+                }
                 for (ch in 0..1) {
                     var s = frame[ch]
                     if (s > 1f) s = 1f
@@ -246,6 +260,15 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
         smoothPan = fx.pan8d
         appliedWet = -1f
         vinylMix = if (fx.vinyl) 1f else 0f
+        rainMix = if (fx.rain != RainPreset.OFF) fx.rainLevel else 0f
+        if (fx.rain != RainPreset.OFF) rainPreset = fx.rain
+    }
+
+    private fun softClip(x: Float): Float {
+        val a = abs(x)
+        if (a <= 0.8f) return x
+        val y = 0.8f + 0.2f * kotlin.math.tanh(((a - 0.8f) / 0.2f).toDouble()).toFloat()
+        return if (x < 0) -y else y
     }
 
     private fun hermite(xm1: Float, x0: Float, x1: Float, x2: Float, t: Float): Float {
