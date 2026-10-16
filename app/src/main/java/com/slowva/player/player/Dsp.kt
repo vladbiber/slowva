@@ -112,19 +112,19 @@ private class LowShelf {
 
 class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
 
-    private val verbL = Verb(0)
-    private val verbR = Verb(SPREAD)
-    private val shelfL = LowShelf()
-    private val shelfR = LowShelf()
-    private val vinyl = Vinyl(sampleRate)
+    private var verbL = Verb(0)
+    private var verbR = Verb(SPREAD)
+    private var shelfL = LowShelf()
+    private var shelfR = LowShelf()
+    private var vinyl = Vinyl(sampleRate)
     private val frame = FloatArray(2)
     private var vinylMix = 0f
-    private val rainFx = Rain(sampleRate)
+    private var rainFx = Rain(sampleRate)
     private val rainFrame = FloatArray(2)
     private var rainMix = 0f
     private var rainPreset = RainPreset.OFF
-    private val roomL = Biquad()
-    private val roomR = Biquad()
+    private var roomL = Biquad()
+    private var roomR = Biquad()
     private var appliedMuffle = -1f
     private var panPhase = 0.0
     private var smoothWidth = 1f
@@ -168,6 +168,7 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
         }
         val capFrames = out.size / 2 - 2
         var nout = 0
+        var poisoned = false
 
         for (i in 0 until inFrames) {
             for (ch in 0..1) {
@@ -237,6 +238,7 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
                 }
                 for (ch in 0..1) {
                     var s = frame[ch]
+                    if (s.isNaN()) { s = 0f; poisoned = true }
                     if (s > 1f) s = 1f
                     if (s < -1f) s = -1f
                     out[nout * 2 + ch] = (s * 32767f).toInt().toShort()
@@ -248,7 +250,19 @@ class Dsp(private val fx: Fx, private val sampleRate: Float = 44100f) {
             frac -= 1.0
             if (nout >= capFrames) break
         }
+        // one NaN would stay in the filter feedback forever and mute everything after it
+        if (poisoned || smoothRate.isNaN() || frac.isNaN()) clearState()
         return nout
+    }
+
+    private fun clearState() {
+        verbL = Verb(0); verbR = Verb(SPREAD)
+        shelfL = LowShelf(); shelfR = LowShelf()
+        vinyl = Vinyl(sampleRate)
+        rainFx = Rain(sampleRate)
+        roomL = Biquad(); roomR = Biquad()
+        appliedMuffle = -1f
+        reset()
     }
 
     fun reset() {

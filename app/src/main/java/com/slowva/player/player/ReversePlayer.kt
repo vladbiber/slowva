@@ -2,9 +2,6 @@ package com.slowva.player.player
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.os.Process as AndroidProcess
 import android.os.SystemClock
 import android.util.Log
@@ -143,24 +140,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
         val dsp = Dsp(fx, rate.toFloat())
         dsp.reset()
         val analyzer = SpectrumAnalyzer(sampleRate = rate.toInt())
-        val minBuf = AudioTrack.getMinBufferSize(rate.toInt(), AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
-        val out = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(rate.toInt())
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                    .build()
-            )
-            .setBufferSizeInBytes(maxOf(minBuf * 4, 64 * 1024))
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+        val out = AudioOut(rate.toInt())
         out.play()
 
         val raw = ByteArray(CHUNK * 4)
@@ -174,11 +154,11 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
             RandomAccessFile(file, "r").use { f ->
                 while (run == generation) {
                     if (paused) {
-                        if (out.playState == AudioTrack.PLAYSTATE_PLAYING) out.pause()
+                        if (out.isPlaying) out.pause()
                         Thread.sleep(30)
                         continue
                     }
-                    if (out.playState != AudioTrack.PLAYSTATE_PLAYING) out.play()
+                    if (!out.isPlaying) out.play()
                     val s = seekFrame
                     if (s >= 0) { pos = s; seekFrame = -1 }
                     if (pos <= 0) { finished = true; break }
@@ -202,12 +182,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
                         o += 2
                     }
                     out.setVolume(volume)
-                    var written = 0
-                    while (written < o && run == generation && seekFrame < 0) {
-                        val w = out.write(outBytes, written, o - written)
-                        if (w <= 0) break
-                        written += w
-                    }
+                    out.write(outBytes, o) { run == generation && seekFrame < 0 }
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastUi > 200 && run == generation) {
                         lastUi = now
@@ -219,8 +194,7 @@ class ReversePlayer(private val ctx: Context, private val fx: Fx) {
         } catch (e: Exception) {
             Log.w(TAG, "reverse pump stopped: ${e.message}")
         } finally {
-            runCatching { out.stop() }
-            runCatching { out.release() }
+            out.release()
             onSpectrum?.invoke(analyzer.clear())
         }
         if (finished && run == generation) {

@@ -1,10 +1,6 @@
 package com.slowva.player.player
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.os.SystemClock
 import android.os.Process as AndroidProcess
 import android.util.Log
@@ -120,33 +116,13 @@ class LocalPlayer(private val ctx: Context, val fx: Fx) {
         status.value = Status.FAILED
     }
 
-    @SuppressLint("MissingPermission")
     private fun pumpAudio(p: Process, run: Int) {
         AndroidProcess.setThreadPriority(AndroidProcess.THREAD_PRIORITY_URGENT_AUDIO)
         val dsp = Dsp(fx)
         val analyzer = SpectrumAnalyzer()
         dsp.reset()
 
-        val minBuf = AudioTrack.getMinBufferSize(
-            RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT
-        ).coerceAtLeast(8192)
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(RATE)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                    .build()
-            )
-            .setBufferSizeInBytes(maxOf(minBuf * 4, 64 * 1024))
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+        val track = AudioOut(RATE)
         track.play()
 
         val raw = ByteArray(CHUNK_FRAMES * 4)
@@ -187,21 +163,17 @@ class LocalPlayer(private val ctx: Context, val fx: Fx) {
                     outBytes[o + 1] = ((s shr 8) and 0xFF).toByte()
                     o += 2
                 }
-                var written = 0
-                while (written < o && run == generation) {
-                    val n = track.write(outBytes, written, o - written)
-                    if (n <= 0) break
-                    written += n
-                }
+                track.write(outBytes, o) { run == generation }
                 // keep the 1-3 bytes of a split frame for the next read
                 for (k in 0 until carry) raw[k] = raw[got + k]
             }
         } catch (e: Exception) {
             if (run == generation) Log.w(TAG, "audio pump stopped: ${e.message}")
         } finally {
-            runCatching { track.stop() }
-            runCatching { track.release() }
+            track.release()
             if (run == generation) {
+                // a pump that died leaves librespot alive but unheard; end it so the watchdog restarts it
+                runCatching { p.destroy() }
                 spectrum.value = analyzer.clear()
                 releaseMulticast()
                 if (status.value != Status.FAILED) status.value = Status.STOPPED

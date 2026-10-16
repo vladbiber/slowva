@@ -2,9 +2,7 @@ package com.slowva.player.player
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -191,19 +189,7 @@ class FilePlayer(private val ctx: Context, private val fx: Fx) {
         val dsp = Dsp(fx, rate.toFloat())
         dsp.reset()
         val analyzer = SpectrumAnalyzer(sampleRate = rate)
-        val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
-        val out = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build()
-            )
-            .setBufferSizeInBytes(maxOf(minBuf * 4, 64 * 1024))
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+        val out = AudioOut(rate)
         val inShorts = ShortArray(CHUNK * 2)
         val outShorts = ShortArray(dsp.maxOutFrames(CHUNK) * 2)
         val outBytes = ByteArray(outShorts.size * 2)
@@ -213,11 +199,11 @@ class FilePlayer(private val ctx: Context, private val fx: Fx) {
             out.play()
             while (run == generation) {
                 if (paused) {
-                    if (out.playState == AudioTrack.PLAYSTATE_PLAYING) out.pause()
+                    if (out.isPlaying) out.pause()
                     Thread.sleep(30)
                     continue
                 }
-                if (out.playState != AudioTrack.PLAYSTATE_PLAYING) out.play()
+                if (!out.isPlaying) out.play()
                 val s = seekMs
                 if (s >= 0) { seekMs = -1; dec.seek(s); out.pause(); out.flush(); out.play() }
                 val frames = dec.read(inShorts)
@@ -230,12 +216,7 @@ class FilePlayer(private val ctx: Context, private val fx: Fx) {
                     o += 2
                 }
                 out.setVolume(volume)
-                var written = 0
-                while (written < o && run == generation && seekMs < 0) {
-                    val w = out.write(outBytes, written, o - written)
-                    if (w <= 0) break
-                    written += w
-                }
+                out.write(outBytes, o) { run == generation && seekMs < 0 }
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastUi > 200 && run == generation) {
                     lastUi = now
@@ -248,8 +229,7 @@ class FilePlayer(private val ctx: Context, private val fx: Fx) {
         } catch (e: Exception) {
             Log.w(TAG, "file pump stopped: ${e.message}")
         } finally {
-            runCatching { out.stop() }
-            runCatching { out.release() }
+            out.release()
             dec.close()
             onSpectrum?.invoke(analyzer.clear())
         }
