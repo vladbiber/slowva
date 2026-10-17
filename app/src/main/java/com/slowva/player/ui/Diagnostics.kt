@@ -52,7 +52,7 @@ fun DiagnosticsCard(vm: AppViewModel) {
         val local = PlayerHub.local
         val creds = SessionToken.credentialsFile(ctx)
         val log = File(ctx.cacheDir, "librespot.log")
-        val tail = runCatching { log.readLines().takeLast(3).joinToString("\n") }
+        val tail = runCatching { log.readLines().takeLast(15).joinToString("\n") }
             .getOrDefault("(no log yet)")
         report = buildString {
             appendLine("librespot: ${local.status.value}" + if (local.isRunning) " (running)" else "")

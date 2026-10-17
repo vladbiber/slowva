@@ -298,10 +298,66 @@ object PlayerHub {
 
     // ---- transport ------------------------------------------------------
 
-    private fun call(what: String, block: suspend () -> Unit) = scope.launch {
+    private fun call(
+        what: String,
+        recover: (suspend (device: String) -> Unit)? = null,
+        block: suspend () -> Unit,
+    ) = scope.launch {
         runCatching { block() }
-            .onFailure { say("$what: ${it.message?.take(120)}") }
+            .recoverCatching { e ->
+                if (recover == null || !lostDevice(e)) throw e
+                val device = ensureLocal(transferPlayback = false) ?: throw e
+                recover(device)
+            }
+            .onFailure { say("$what: ${explain(it)}") }
         delay(350)
+        refresh()
+    }
+
+    private fun lostDevice(e: Throwable) = e is Spotify.ApiException && e.noActiveDevice
+
+    private fun explain(e: Throwable) =
+        if (lostDevice(e)) "Spotify lost this phone — tap a track to start again"
+        else e.message?.take(120).orEmpty()
+
+    /** last state Spotify reported for real tracks, so a restarted librespot can carry on */
+    @Volatile private var lastSpotify: PlaybackState? = null
+    @Volatile private var lastSpotifyAt = 0L
+
+    /** Puts the last Spotify track back on [device] after Spotify forgot the old session. */
+    private suspend fun restoreOn(device: String, positionMs: Int? = null, play: Boolean = true) {
+        val last = lastSpotify ?: playback.value?.takeIf { it.deviceId != LOCAL_FILE_DEVICE }
+        val track = last?.track?.takeIf { !LocalLibrary.isLocal(it) }
+            ?: throw Spotify.ApiException(404, "no active device", "NO_ACTIVE_DEVICE")
+        val from = positionMs ?: run {
+            val ran = if (last.isPlaying) System.currentTimeMillis() - lastSpotifyAt else 0L
+            (last.progressMs + ran).coerceAtMost(track.durationMs - 1000L).coerceAtLeast(0L).toInt()
+        }
+        // transfer keeps the album or playlist; fall back to the queue when Spotify has nothing left
+        runCatching { api.transfer(device, play) }
+        delay(800)
+        val now = runCatching { api.state() }.getOrNull()
+        if (now?.deviceId == device && now.track?.id == track.id) {
+            if (positionMs != null || kotlin.math.abs(now.progressMs - from) > 5000) api.seek(from)
+        } else {
+            val i = queue.indexOfFirst { it.id == track.id }
+            val uris = if (i >= 0) queue.drop(i).take(100).map { it.uri } else listOf(track.uri)
+            api.play(device, uris = uris, offset = 0, positionMs = from)
+            if (!play) { delay(400); api.pause() }
+        }
+    }
+
+    /** librespot came back after dying: start it and pick the music up where it stopped. */
+    fun recoverLocal() = scope.launch {
+        val last = lastSpotify
+        val resume = last?.isPlaying == true && last.deviceName == local.deviceName &&
+            System.currentTimeMillis() - lastSpotifyAt < 30 * 60_000L &&
+            !reverseOn.value && !fileOn.value
+        val device = ensureLocal(transferPlayback = false) ?: return@launch
+        if (!resume) return@launch
+        runCatching { restoreOn(device) }
+            .onFailure { say("could not resume: ${explain(it)}") }
+        delay(400)
         refresh()
     }
 
@@ -354,12 +410,12 @@ object PlayerHub {
         runCatching {
             val state = playback.value
             if (state?.isPlaying == true) {
-                api.pause()
+                runCatching { api.pause() }.onFailure { if (!lostDevice(it)) throw it }
             } else {
                 val device = ensureLocal(transferPlayback = false) ?: return@runCatching
-                api.resume(device)
+                runCatching { api.resume(device) }.getOrElse { if (lostDevice(it)) restoreOn(device) else throw it }
             }
-        }.onFailure { say("play/pause: ${it.message?.take(120)}") }
+        }.onFailure { say("play/pause: ${explain(it)}") }
         delay(350)
         refresh()
     }
@@ -368,7 +424,7 @@ object PlayerHub {
         when {
             reverseOn.value -> scope.launch { reverseStep(+1) }
             fileOn.value -> scope.launch { fileStep(+1) }
-            else -> call("next") { api.next() }
+            else -> call("next", recover = { restoreOn(it); delay(500); api.next() }) { api.next() }
         }
     }
     fun previous() {
@@ -379,14 +435,14 @@ object PlayerHub {
                 val pos = files.state.value?.positionMs ?: 0
                 if (pos > 3000) { files.seek(0); mirrorFile() } else fileStep(-1)
             }
-            else -> call("prev") { api.previous() }
+            else -> call("prev", recover = { restoreOn(it, positionMs = 0) }) { api.previous() }
         }
     }
     fun seek(ms: Int) {
         when {
             reverseOn.value -> { reverse.seek(ms.toLong()); mirrorReverse() }
             fileOn.value -> { files.seek(ms.toLong()); mirrorFile() }
-            else -> call("seek") { api.seek(ms) }
+            else -> call("seek", recover = { restoreOn(it, positionMs = ms) }) { api.seek(ms) }
         }
     }
 
@@ -570,6 +626,14 @@ object PlayerHub {
     suspend fun refresh() {
         if (fileOn.value && !reverseOn.value) { mirrorFile(); return }
         runCatching { api.state() }.onSuccess {
+            if (it?.track != null && it.deviceId != null) {
+                lastSpotify = it
+                lastSpotifyAt = System.currentTimeMillis()
+            } else if (it == null && !reverseOn.value) {
+                // keep showing the last track so play/seek can bring it back
+                playback.value = playback.value?.copy(isPlaying = false, deviceId = null)
+                return@onSuccess
+            }
             playback.value = it
             if (reverseOn.value) {
                 reverse.volume = it?.volumePercent?.div(100f) ?: reverse.volume

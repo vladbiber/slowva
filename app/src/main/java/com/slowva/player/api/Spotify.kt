@@ -28,7 +28,10 @@ class Spotify(private val ctx: Context) {
 
     private val json = "application/json".toMediaType()
 
-    class ApiException(val code: Int, message: String) : Exception(message)
+    class ApiException(val code: Int, message: String, val reason: String? = null) : Exception(message) {
+        /** Spotify forgot which device plays: librespot restarted or went idle too long */
+        val noActiveDevice: Boolean get() = code == 404 && (reason == "NO_ACTIVE_DEVICE" || message.orEmpty().contains("device", true))
+    }
 
     companion object {
         /** shared across every call: one 429 pauses the whole app, not one screen */
@@ -75,7 +78,14 @@ class Spotify(private val ctx: Context) {
                             throw ApiException(429, "Spotify rate limit, ${retryAfter}s to go")
                         }
                     }
-                    else -> throw ApiException(resp.code, text.take(300))
+                    else -> {
+                        val err = runCatching { JSONObject(text).optJSONObject("error") }.getOrNull()
+                        throw ApiException(
+                            resp.code,
+                            err?.optString("message")?.takeIf { it.isNotBlank() } ?: text.take(300),
+                            err?.optString("reason")?.takeIf { it.isNotBlank() },
+                        )
+                    }
                 }
             }
         }

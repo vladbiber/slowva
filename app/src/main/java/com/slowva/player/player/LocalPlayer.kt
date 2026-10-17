@@ -147,38 +147,51 @@ class LocalPlayer(private val ctx: Context, val fx: Fx) {
                     inShorts[i] = ((raw[b].toInt() and 0xFF) or (raw[b + 1].toInt() shl 8)).toShort()
                     b += 2
                 }
-                val outFrames = dsp.process(inShorts, frames, outShorts)
-                if (status.value == Status.STARTING && run == generation) {
-                    status.value = Status.RUNNING
+                // a bad chunk must not end the pump: killing librespot makes Spotify forget this phone
+                try {
+                    val outFrames = dsp.process(inShorts, frames, outShorts)
+                    if (status.value == Status.STARTING && run == generation) {
+                        status.value = Status.RUNNING
+                    }
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastSpectrumAt >= 70L) {
+                        spectrum.value = analyzer.analyze(outShorts, outFrames)
+                        lastSpectrumAt = now
+                    }
+                    var o = 0
+                    for (i in 0 until outFrames * 2) {
+                        val s = outShorts[i].toInt()
+                        outBytes[o] = (s and 0xFF).toByte()
+                        outBytes[o + 1] = ((s shr 8) and 0xFF).toByte()
+                        o += 2
+                    }
+                    track.write(outBytes, o) { run == generation }
+                } catch (e: Exception) {
+                    note("audio chunk dropped: $e")
+                    runCatching { dsp.reset() }
                 }
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastSpectrumAt >= 70L) {
-                    spectrum.value = analyzer.analyze(outShorts, outFrames)
-                    lastSpectrumAt = now
-                }
-                var o = 0
-                for (i in 0 until outFrames * 2) {
-                    val s = outShorts[i].toInt()
-                    outBytes[o] = (s and 0xFF).toByte()
-                    outBytes[o + 1] = ((s shr 8) and 0xFF).toByte()
-                    o += 2
-                }
-                track.write(outBytes, o) { run == generation }
                 // keep the 1-3 bytes of a split frame for the next read
                 for (k in 0 until carry) raw[k] = raw[got + k]
             }
         } catch (e: Exception) {
-            if (run == generation) Log.w(TAG, "audio pump stopped: ${e.message}")
+            if (run == generation) note("audio pump stopped: $e")
         } finally {
             track.release()
             if (run == generation) {
-                // a pump that died leaves librespot alive but unheard; end it so the watchdog restarts it
+                note("librespot pipe closed, exit ${runCatching { p.exitValue() }.getOrNull()}")
+                // only librespot closing its pipe gets here; make sure it is gone so the watchdog restarts it
                 runCatching { p.destroy() }
                 spectrum.value = analyzer.clear()
                 releaseMulticast()
                 if (status.value != Status.FAILED) status.value = Status.STOPPED
             }
         }
+    }
+
+    /** Pump events go next to librespot's own log so Diagnostics shows why sound stopped. */
+    private fun note(text: String) {
+        Log.w(TAG, text)
+        runCatching { File(ctx.cacheDir, "librespot.log").appendText("slowva: $text\n") }
     }
 
     private fun acquireMulticast() {

@@ -217,8 +217,7 @@ class PlayerService : Service() {
             ) {
                 val token = Auth.streamingToken(this@PlayerService)
                 if (token != null || SessionToken.available(this@PlayerService)) {
-                    PlayerHub.local.start(token)
-                    PlayerHub.connectLocal(transferPlayback = false)
+                    PlayerHub.recoverLocal().join()
                 }
             }
         }
