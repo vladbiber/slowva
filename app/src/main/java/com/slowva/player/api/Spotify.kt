@@ -124,11 +124,13 @@ class Spotify(private val ctx: Context) {
         uris: List<String>? = null,
         offset: Int? = null,
         positionMs: Int = 0,
+        offsetUri: String? = null,
     ) {
         val body = JSONObject()
         if (contextUri != null) body.put("context_uri", contextUri)
         if (uris != null) body.put("uris", JSONArray(uris))
         if (offset != null) body.put("offset", JSONObject().put("position", offset))
+        else if (offsetUri != null) body.put("offset", JSONObject().put("uri", offsetUri))
         body.put("position_ms", positionMs)
         request(
             "PUT", "/me/player/play",

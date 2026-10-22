@@ -28,6 +28,8 @@ class LocalPlayer(private val ctx: Context, val fx: Fx) {
     val lastError = MutableStateFlow<String?>(null)
     val failureKind = MutableStateFlow<FailureKind?>(null)
     val spectrum = MutableStateFlow(FloatArray(SpectrumAnalyzer.BAR_COUNT))
+    /** librespot rebuilt its Connect session; Spotify forgot what was playing */
+    var onSessionLost: (() -> Unit)? = null
 
     @Volatile private var proc: Process? = null
     @Volatile private var pump: Thread? = null
@@ -221,6 +223,14 @@ class LocalPlayer(private val ctx: Context, val fx: Fx) {
                     out.appendLine(line)
                     out.flush()
                     when {
+                        line.contains("Spirc shut down too often", true) -> {
+                            // librespot gives up but keeps running; kill it so the watchdog restarts it
+                            note("connect session lost too often, restarting librespot")
+                            if (run == generation) runCatching { p.destroy() }
+                        }
+                        line.contains("Spirc shut down unexpectedly", true) -> {
+                            if (run == generation) onSessionLost?.invoke()
+                        }
                         line.contains("Premium account required", true) -> fail(
                             "Spotify Premium is required for playback on this phone",
                             FailureKind.PREMIUM,

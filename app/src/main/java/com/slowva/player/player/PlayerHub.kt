@@ -41,6 +41,8 @@ object PlayerHub {
     /** reverse mode is on; it stays on across tracks until switched off */
     val reverseOn = MutableStateFlow(false)
     private var queue: List<Track> = emptyList()
+    /** album or playlist the queue came from, so a restore keeps it */
+    private var queueContext: String? = null
     private var queueIndex = 0
     lateinit var local: LocalPlayer
         private set
@@ -64,7 +66,7 @@ object PlayerHub {
         if (::app.isInitialized) return
         app = context.applicationContext
         api = Spotify(app)
-        local = LocalPlayer(app, fx)
+        local = LocalPlayer(app, fx).apply { onSessionLost = { scope.launch { heal("session") } } }
         files = FilePlayer(app, fx).apply {
             onSpectrum = { local.spectrum.value = it }
             onFinished = { scope.launch { fileStep(+1, auto = true) } }
@@ -341,8 +343,14 @@ object PlayerHub {
             if (positionMs != null || kotlin.math.abs(now.progressMs - from) > 5000) api.seek(from)
         } else {
             val i = queue.indexOfFirst { it.id == track.id }
-            val uris = if (i >= 0) queue.drop(i).take(100).map { it.uri } else listOf(track.uri)
-            api.play(device, uris = uris, offset = 0, positionMs = from)
+            val ctx = queueContext?.takeIf { i >= 0 }
+            if (ctx != null) {
+                runCatching { api.play(device, contextUri = ctx, offsetUri = track.uri, positionMs = from) }
+                    .getOrElse { api.play(device, uris = queue.drop(i).take(100).map { it.uri }, offset = 0, positionMs = from) }
+            } else {
+                val uris = if (i >= 0) queue.drop(i).take(100).map { it.uri } else listOf(track.uri)
+                api.play(device, uris = uris, offset = 0, positionMs = from)
+            }
             if (!play) { delay(400); api.pause() }
         }
     }
@@ -361,9 +369,40 @@ object PlayerHub {
         refresh()
     }
 
+    /** Spotify dropped the track while it played here: put it back where it was. */
+    @Volatile private var healing = false
+    @Volatile private var lastHealAt = 0L
+
+    private suspend fun heal(why: String) {
+        val last = lastSpotify ?: return
+        val now = System.currentTimeMillis()
+        if (!last.isPlaying || last.deviceName != local.deviceName) return
+        if (now - lastSpotifyAt > 120_000L || reverseOn.value || fileOn.value) return
+        if (healing || now - lastHealAt < 20_000L) return
+        val track = last.track ?: return
+        // the album simply ended
+        val pos = last.progressMs + (now - lastSpotifyAt)
+        if (queue.lastOrNull()?.id == track.id && pos >= track.durationMs - 5000 && last.repeat == "off") return
+        healing = true
+        lastHealAt = now
+        try {
+            if (why == "session") delay(2500)
+            val device = awaitLocalDevice(timeoutMs = 30_000) ?: return
+            localDeviceId.value = device
+            runCatching { restoreOn(device) }
+                .onSuccess { say("Spotify dropped the connection — resumed") }
+                .onFailure { say("could not resume: ${explain(it)}") }
+            delay(600)
+            refresh()
+        } finally {
+            healing = false
+        }
+    }
+
     fun playTracks(tracks: List<Track>, index: Int, contextUri: String? = null) {
         queue = tracks
         queueIndex = index
+        queueContext = contextUri
         if (reverseOn.value) {
             scope.launch { tracks.getOrNull(index)?.let { launchReverse(it) } }
             return
@@ -454,7 +493,7 @@ object PlayerHub {
         fileOn.value = true
         holdForeground()
         val i = queue.indexOfFirst { it.id == track.id }
-        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0 }
+        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0; queueContext = null }
         files.volume = 1f
         files.start(track, fromMs)
         mirrorFile()
@@ -518,7 +557,7 @@ object PlayerHub {
         holdForeground()
         if (st.isPlaying) runCatching { api.pause() }
         val i = queue.indexOfFirst { it.id == track.id }
-        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0 }
+        if (i >= 0) queueIndex = i else { queue = listOf(track); queueIndex = 0; queueContext = null }
         launchReverse(track)
     }
 
@@ -629,9 +668,11 @@ object PlayerHub {
             if (it?.track != null && it.deviceId != null) {
                 lastSpotify = it
                 lastSpotifyAt = System.currentTimeMillis()
-            } else if (it == null && !reverseOn.value) {
+            } else if ((it == null || it.track == null) && !reverseOn.value) {
                 // keep showing the last track so play/seek can bring it back
-                playback.value = playback.value?.copy(isPlaying = false, deviceId = null)
+                val wasHere = lastSpotify?.isPlaying == true && lastSpotify?.deviceName == local.deviceName
+                playback.value = playback.value?.copy(isPlaying = false, deviceId = it?.deviceId)
+                if (wasHere) scope.launch { heal("empty") }
                 return@onSuccess
             }
             playback.value = it
