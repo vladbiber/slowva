@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cross-compile librespot for Android arm64 and drop it into the app's jniLibs
+# Cross-compile slowva's librespot helpers for Android and drop them into the app's jniLibs
 # as lib<name>.so, the only place Android still lets an app exec a binary from.
 set -e
 
@@ -31,14 +31,7 @@ build() {
     compiler_target=$target
     [ "$target" = "armv7-linux-androideabi" ] && compiler_target=armv7a-linux-androideabi
     echo "=== $target -> $abi"
-    cargo install librespot --version "$LIBRESPOT_VERSION" --locked --force \
-        --target "$target" \
-        --no-default-features --features rustls-tls-webpki-roots,with-libmdns \
-        --root "$HERE/build/$abi"
     mkdir -p "$OUT/$abi"
-    cp "$HERE/build/$abi/bin/librespot" "$OUT/$abi/liblibrespot.so"
-    "$TOOL/llvm-strip" "$OUT/$abi/liblibrespot.so" 2>/dev/null || true
-
     # The token helper reuses the authenticated local librespot session so the
     # Web API can recover when a normal OAuth access token expires.
     ( cd "$HERE/token-helper" && cargo build --release --locked --bins --target "$target" \
@@ -46,10 +39,10 @@ build() {
     cp "$HERE/build/$abi/token-target/$target/release/slowva-token" \
         "$OUT/$abi/libslowvatoken.so"
     "$TOOL/llvm-strip" "$OUT/$abi/libslowvatoken.so" 2>/dev/null || true
-    # Reverse mode decodes a whole track to a file first, without a Connect device.
-    cp "$HERE/build/$abi/token-target/$target/release/slowva-reverse" \
-        "$OUT/$abi/libslowvareverse.so"
-    "$TOOL/llvm-strip" "$OUT/$abi/libslowvareverse.so" 2>/dev/null || true
+    # Plays and reverses single tracks without a Connect device.
+    cp "$HERE/build/$abi/token-target/$target/release/slowva-decode" \
+        "$OUT/$abi/libslowvadecode.so"
+    "$TOOL/llvm-strip" "$OUT/$abi/libslowvadecode.so" 2>/dev/null || true
 
     # Prefer IPv4 for consumer routers that advertise unusable IPv6 routes.
     "$TOOL/${compiler_target}${API}-clang" -shared -fPIC -O2 "$HERE/ipv4.c" -ldl \

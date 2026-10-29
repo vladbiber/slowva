@@ -1,0 +1,13 @@
+{
+  "tracks": [
+    { "id": "d1", "title": "Skyline",        "artist": "Neon Drift",   "album": "Midnight Avenue", "file": "skyline.m4a",     "cover": "cover_midnight.png", "durationSec": 28 },
+    { "id": "d2", "title": "Afterglow",      "artist": "Neon Drift",   "album": "Midnight Avenue", "file": "afterglow.m4a",   "cover": "cover_midnight.png", "durationSec": 24 },
+    { "id": "d3", "title": "Velvet Rain",    "artist": "Neon Drift",   "album": "Midnight Avenue", "file": "velvet_rain.m4a", "cover": "cover_midnight.png", "durationSec": 26 },
+    { "id": "d4", "title": "Northern Light", "artist": "Aurora Skies", "album": "Glass Horizons",  "file": "northern.m4a",    "cover": "cover_glass.png",    "durationSec": 30 },
+    { "id": "d5", "title": "Stillness",      "artist": "Aurora Skies", "album": "Glass Horizons",  "file": "stillness.m4a",   "cover": "cover_glass.png",    "durationSec": 22 },
+    { "id": "d6", "title": "Drifting",       "artist": "Aurora Skies", "album": "Glass Horizons",  "file": "drifting.m4a",    "cover": "cover_glass.png",    "durationSec": 27 },
+    { "id": "d7", "title": "Lo-Fi Sunset",   "artist": "Kashi",        "album": "Late Hours",      "file": "sunset.m4a",      "cover": "cover_late.png",     "durationSec": 25 },
+    { "id": "d8", "title": "Coffee Steam",   "artist": "Kashi",        "album": "Late Hours",      "file": "coffee.m4a",      "cover": "cover_late.png",     "durationSec": 23 },
+    { "id": "d9", "title": "3AM",            "artist": "Kashi",        "album": "Late Hours",      "file": "threeam.m4a",     "cover": "cover_late.png",     "durationSec": 29 }
+  ]
+}

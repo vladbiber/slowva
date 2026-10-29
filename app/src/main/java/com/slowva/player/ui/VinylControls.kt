@@ -21,9 +21,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.slowva.player.player.PlayerHub
-import com.slowva.player.player.VinylPreset
+import com.slowva.player.player.fx.VinylPreset
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -37,7 +36,7 @@ fun VinylControls(modifier: Modifier = Modifier) {
                 Text("Real vinyl sound", fontWeight = FontWeight.SemiBold)
                 Text(
                     "Crackle, pops, wow & flutter and a warm, rolled-off top end",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(
@@ -47,7 +46,7 @@ fun VinylControls(modifier: Modifier = Modifier) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChipRow {
             VinylPreset.entries.forEach { p ->
                 val active = abs(p.crackle - v.crackle) < 0.01f && abs(p.warmth - v.warmth) < 0.01f &&
                     abs(p.wow - v.wow) < 0.01f && abs(p.surface - v.surface) < 0.01f

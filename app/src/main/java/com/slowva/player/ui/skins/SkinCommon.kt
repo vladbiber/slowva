@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -49,6 +51,7 @@ import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import coil.size.Scale
 import com.slowva.player.player.PlayerHub
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -76,7 +79,10 @@ enum class Skin(val label: String) {
  * at the slowed rate, so the clock does too. A local seek shows up at once.
  */
 @Stable
-class LiveProgress {
+class LiveProgress(
+    /** a preview (the skin picker): drawn without the live spectrum so nothing moves */
+    val still: Boolean = false,
+) {
     var anchorMs by mutableLongStateOf(0L)
     var anchorAt by mutableLongStateOf(0L)
     var clock by mutableLongStateOf(0L)
@@ -121,16 +127,11 @@ class LiveProgress {
 fun rememberLiveProgress(): LiveProgress {
     val state by PlayerHub.playback.collectAsState()
     val rate by PlayerHub.rate.collectAsState()
-    val localId by PlayerHub.localDeviceId.collectAsState()
     val live = remember { LiveProgress() }
     val s = state
-    live.durationMs = (s?.track?.durationMs ?: 1).toLong().coerceAtLeast(1)
+    live.durationMs = (s?.durationMs ?: 1L).coerceAtLeast(1)
     val reversed by PlayerHub.reverseOn.collectAsState()
-    live.speed = when {
-        reversed -> -rate
-        (localId != null && s?.deviceId == localId) || s?.deviceId == PlayerHub.LOCAL_FILE_DEVICE -> rate
-        else -> 1f
-    }
+    live.speed = if (reversed) -rate else rate
     LaunchedEffect(s?.progressMs, s?.isPlaying, s?.track?.id) {
         live.sync(s?.progressMs ?: 0, s?.isPlaying == true)
     }
@@ -196,7 +197,8 @@ fun rememberArtPainter(url: String?): Painter {
     var painter by remember { mutableStateOf<Painter>(ColorPainter(Color.Transparent)) }
     LaunchedEffect(url) {
         if (url == null) { painter = ColorPainter(Color.Transparent); return@LaunchedEffect }
-        val req = ImageRequest.Builder(ctx).data(url).size(640).allowHardware(false).build()
+        // big player art only: up to 1080 px, FIT so 16:9 stills aren't blown up to fill a square
+        val req = ImageRequest.Builder(ctx).data(url).size(1080).scale(Scale.FIT).allowHardware(false).build()
         val bmp = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap()
         if (bmp != null) painter = BitmapPainter(bmp.asImageBitmap())
     }
@@ -208,14 +210,15 @@ fun rememberArtPainter(url: String?): Painter {
  * the most common saturated hue, lifted to a soft, readable tint.
  */
 @Composable
-fun rememberArtAccent(url: String?, fallback: Color = Color(0xFFE8A48F)): Color {
+fun rememberArtAccent(url: String?, fallback: Color): Color {
     val ctx = LocalContext.current
     var picked by remember { mutableStateOf(fallback) }
     LaunchedEffect(url) {
         if (url == null) { picked = fallback; return@LaunchedEffect }
         val req = ImageRequest.Builder(ctx).data(url).size(48).allowHardware(false).build()
         val bmp = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap(48, 48, Bitmap.Config.ARGB_8888)
-        picked = bmp?.let { dominantPastel(it) } ?: fallback
+        // a little of the theme color keeps covers from clashing with the rest of the app
+        picked = bmp?.let { dominantPastel(it) }?.let { lerp(it, fallback, 0.15f) } ?: fallback
     }
     val animated by animateColorAsState(picked, tween(700), label = "accent")
     return animated
@@ -249,6 +252,9 @@ fun PillSlider(
     track: Color = Color.White.copy(alpha = 0.22f),
     label: String = "",
     stateText: String? = null,
+    brush: Brush? = null,
+    /** while it has amplitude, the played part is drawn as a moving sine wave */
+    wave: com.slowva.player.ui.Wave? = null,
 ) {
     val latest by rememberUpdatedState(value)
     var drag by remember { mutableFloatStateOf(0f) }
@@ -284,11 +290,23 @@ fun PillSlider(
         val v = value.coerceIn(0f, 1f)
         val x = v * size.width
         drawLine(track, Offset(0f, y), Offset(size.width, y), 2.dp.toPx(), StrokeCap.Round)
-        drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        val amp = (wave?.amp ?: 0f) * 3.dp.toPx()
+        if (amp > 0.1f && wave != null) {
+            val k = TAU / 28.dp.toPx()
+            val path = androidx.compose.ui.graphics.Path()
+            var px = 0f
+            path.moveTo(0f, y + amp * kotlin.math.sin(-wave.phase))
+            while (px < x) {
+                px = minOf(px + 1.dp.toPx(), x)
+                path.lineTo(px, y + amp * kotlin.math.sin(px * k - wave.phase))
+            }
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx(), cap = StrokeCap.Round)
+            if (brush != null) drawPath(path, brush, style = stroke) else drawPath(path, accent, style = stroke)
+        } else if (brush != null) drawLine(brush, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        else drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
         val tw = 4.dp.toPx(); val th = 14.dp.toPx()
-        drawRoundRect(
-            accent, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2)
-        )
+        if (brush != null) drawRoundRect(brush, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2))
+        else drawRoundRect(accent, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2))
     }
 }
 

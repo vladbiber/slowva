@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the Now playing card drawn as a picture, the controls laid over its bottom -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wg_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/wg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_preview" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/wg_prev"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@null"
+            android:contentDescription="Previous"
+            android:src="@drawable/wg_prev" />
+
+        <FrameLayout
+            android:id="@+id/wg_play"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="8dp">
+
+            <ImageView
+                android:id="@+id/wg_play_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:src="@drawable/wg_circle"
+                android:tint="#FFFFFFFF" />
+
+            <ImageView
+                android:id="@+id/wg_play_icon"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:contentDescription="Play or pause"
+                android:src="@drawable/wg_play"
+                android:tint="#FF000000" />
+        </FrameLayout>
+
+        <ImageButton
+            android:id="@+id/wg_next"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@null"
+            android:contentDescription="Next"
+            android:src="@drawable/wg_next" />
+    </LinearLayout>
+</FrameLayout>

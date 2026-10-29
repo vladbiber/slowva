@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.slowva.player.player.PlayerHub
+import com.slowva.player.player.fx.FxRange
 import com.slowva.player.ui.formatMs
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -97,8 +98,8 @@ fun Tp7Skin(live: LiveProgress, art: Painter, accent: Color, title: String, modi
                 listOf(
                     CustomAccessibilityAction("Previous track") { PlayerHub.previous(); true },
                     CustomAccessibilityAction("Next track") { PlayerHub.next(); true },
-                    CustomAccessibilityAction("Slower") { PlayerHub.setRate((rateRef - 0.05f).coerceIn(0.5f, 1.25f)); true },
-                    CustomAccessibilityAction("Faster") { PlayerHub.setRate((rateRef + 0.05f).coerceIn(0.5f, 1.25f)); true },
+                    CustomAccessibilityAction("Slower") { PlayerHub.setRate((rateRef - 0.05f).coerceIn(FxRange.slow(PlayerHub.fxRange.value))); true },
+                    CustomAccessibilityAction("Faster") { PlayerHub.setRate((rateRef + 0.05f).coerceIn(FxRange.slow(PlayerHub.fxRange.value))); true },
                     CustomAccessibilityAction("More reverb") { PlayerHub.setReverb((verbRef + 0.1f).coerceIn(0f, 1f)); true },
                     CustomAccessibilityAction("Less reverb") { PlayerHub.setReverb((verbRef - 0.1f).coerceIn(0f, 1f)); true },
                 ),
@@ -156,8 +157,8 @@ fun Tp7Skin(live: LiveProgress, art: Painter, accent: Color, title: String, modi
                                 val dy = (pos.y - down.position.y) / (L.fader.height * h)
                                 val r = ((startRate - dy * 0.75f) * 100).roundToInt() / 100f
                                 val snapped = if (abs(r - 1f) < 0.02f) 1f else r
-                                PlayerHub.setRate(snapped.coerceIn(0.5f, 1.25f))
-                                show("SLOW %.2fx".format(snapped.coerceIn(0.5f, 1.25f)))
+                                PlayerHub.setRate(snapped.coerceIn(FxRange.slow(PlayerHub.fxRange.value)))
+                                show("SLOW %.2fx".format(snapped.coerceIn(FxRange.slow(PlayerHub.fxRange.value))))
                             }
                             Part.KNOB -> {
                                 val dy = (down.position.y - pos.y) / (h * 0.25f)

@@ -1,10 +1,11 @@
 // slowva-token <librespot-cache-dir> <comma-separated-scopes>
 // Mints a Web API access token from the cached librespot session credentials
 // (same mechanism official clients use), prints "ACCESS_TOKEN EXPIRES_IN_SECS".
+// First run: SLOWVA_ACCESS_TOKEN (an OAuth token) is traded for reusable cached credentials.
 use std::env;
 use std::process::exit;
 
-use librespot_core::{cache::Cache, config::SessionConfig, session::Session};
+use librespot_core::{authentication::Credentials, cache::Cache, config::SessionConfig, session::Session};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -17,12 +18,17 @@ async fn main() {
         Ok(c) => c,
         Err(e) => { eprintln!("cache: {e}"); exit(2); }
     };
-    let Some(creds) = cache.credentials() else {
-        eprintln!("no cached credentials — sign in through slowva first");
-        exit(3);
+    let oauth = env::var("SLOWVA_ACCESS_TOKEN").ok().filter(|t| !t.is_empty());
+    let (creds, store) = match (cache.credentials(), oauth) {
+        (_, Some(token)) => (Credentials::with_access_token(token), true),
+        (Some(c), None) => (c, false),
+        (None, None) => {
+            eprintln!("no cached credentials, sign in through slowva first");
+            exit(3);
+        }
     };
-    let session = Session::new(SessionConfig::default(), None);
-    if let Err(e) = session.connect(creds, false).await {
+    let session = Session::new(SessionConfig::default(), Some(cache));
+    if let Err(e) = session.connect(creds, store).await {
         eprintln!("connect: {e}");
         exit(4);
     }
@@ -36,3 +42,4 @@ async fn main() {
         }
     }
 }
+

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the ListenBrainz token stays on this phone -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="slowva-listenbrainz.xml" />
+    <exclude domain="file" path="listenbrainz-queue.json" />
+</full-backup-content>

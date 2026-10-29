@@ -195,7 +195,7 @@ private fun DiscStage(
     ) {
         val g = geoFor(size)
         drawDisc(g.c, g.r, platter.angle)
-        drawWave(g, live.fraction, spectrum, accent, Math.toRadians(platter.angle * 2.0).toFloat())
+        drawWave(g, live.fraction, if (live.still) FloatArray(0) else spectrum, accent, Math.toRadians(platter.angle * 2.0).toFloat())
         if (timeInside) {
             val txt = measurer.measure(formatMs(live.positionMs.toInt()), TextStyle(color = accent, fontSize = 11.sp))
             val a = Math.toRadians(122.0)
@@ -238,24 +238,28 @@ private fun DrawScope.drawWave(g: Geo, fraction: Float, bars: FloatArray, accent
     drawCircle(accent, 4.dp.toPx(), dot)
 }
 
-private fun DrawScope.drawTonearm(g: Geo, phi: Float) {
+private fun DrawScope.drawTonearm(g: Geo, phi: Float) = drawTonearm(g.pivot, g.head(phi), g.r)
+
+/** Gold tonearm from [pivot] to the stylus at [head]; [r] is the disc radius it is sized for. */
+internal fun DrawScope.drawTonearm(pivot: Offset, head: Offset, r: Float) {
+    val armLen = (head - pivot).getDistance()
+    val phi = angleOf(pivot, head)
     val gold = Brush.linearGradient(listOf(Color(0xFFE9D9A6), Color(0xFFB89A55), Color(0xFFF2E6BF)))
-    val head = g.head(phi)
-    val dir = (head - g.pivot) / g.armLen
-    val back = g.pivot - dir * (g.r * 0.16f)
+    val dir = (head - pivot) / armLen
+    val back = pivot - dir * (r * 0.16f)
     val shadow = Offset(4.dp.toPx(), 6.dp.toPx())
-    drawLine(Color.Black.copy(alpha = 0.35f), g.pivot + shadow, head + shadow, g.r * 0.03f, StrokeCap.Round)
+    drawLine(Color.Black.copy(alpha = 0.35f), pivot + shadow, head + shadow, r * 0.03f, StrokeCap.Round)
     // counterweight
-    drawLine(Color(0xFF8D8A84), g.pivot, back, g.r * 0.075f, StrokeCap.Round)
-    drawLine(gold, g.pivot, head - dir * (g.r * 0.06f), g.r * 0.026f, StrokeCap.Round)
+    drawLine(Color(0xFF8D8A84), pivot, back, r * 0.075f, StrokeCap.Round)
+    drawLine(gold, pivot, head - dir * (r * 0.06f), r * 0.026f, StrokeCap.Round)
     // pivot base
-    drawCircle(Color.Black.copy(alpha = 0.4f), g.r * 0.1f, g.pivot + shadow)
-    drawCircle(gold, g.r * 0.085f, g.pivot)
-    drawCircle(Color(0xFF6E5B30), g.r * 0.05f, g.pivot, style = Stroke(1.5.dp.toPx()))
-    drawCircle(Color(0xFFF7EED0), g.r * 0.02f, g.pivot)
+    drawCircle(Color.Black.copy(alpha = 0.4f), r * 0.1f, pivot + shadow)
+    drawCircle(gold, r * 0.085f, pivot)
+    drawCircle(Color(0xFF6E5B30), r * 0.05f, pivot, style = Stroke(1.5.dp.toPx()))
+    drawCircle(Color(0xFFF7EED0), r * 0.02f, pivot)
     // headshell
     rotate(phi - 90f, head) {
-        val w = g.r * 0.07f; val h = g.r * 0.15f
+        val w = r * 0.07f; val h = r * 0.15f
         drawRoundRect(gold, Offset(head.x - w / 2, head.y - h * 0.6f), Size(w, h), androidx.compose.ui.geometry.CornerRadius(w * 0.3f))
         drawRoundRect(Color(0xFF3B352A), Offset(head.x - w * 0.3f, head.y), Size(w * 0.6f, h * 0.32f), androidx.compose.ui.geometry.CornerRadius(w * 0.15f))
         drawLine(Color(0xFFF2E6BF), Offset(head.x + w * 0.5f, head.y - h * 0.2f), Offset(head.x + w * 1.1f, head.y - h * 0.32f), 2.dp.toPx(), StrokeCap.Round)

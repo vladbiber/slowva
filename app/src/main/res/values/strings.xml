@@ -1,21 +1,9 @@
 <resources>
-    <string name="app_name">slowva</string>
-    <string name="widget_cava_description">Live CAVA visualizer and playback controls</string>
-    <string name="widget_fx_description">Slow, reverb and connect controls</string>
-    <string name="previous">Previous</string>
-    <string name="play_pause">Play or pause</string>
-    <string name="next">Next</string>
-    <string name="connect_this_phone">Connect to this phone</string>
-    <string name="widget_cava_title">slowva CAVA</string>
-    <string name="widget_connect_hint">Connect this phone to begin</string>
-    <string name="widget_slow">SLOW</string>
-    <string name="widget_reverb">VERB</string>
-    <string name="widget_rate_default">1.00×</string>
-    <string name="widget_reverb_default">0%</string>
-    <string name="widget_connect_phone">CONNECT TO THIS PHONE</string>
-    <string name="symbol_previous">‹</string>
-    <string name="symbol_play">▶</string>
-    <string name="symbol_next">›</string>
-    <string name="symbol_minus">−</string>
-    <string name="symbol_plus">+</string>
+    <string name="app_name">Slowva</string>
+    <string name="widget_vinyl_desc">The record from the player</string>
+    <string name="widget_cd_desc">The CD from the player</string>
+    <string name="widget_tape_desc">The cassette from the player</string>
+    <string name="widget_tp7_desc">The TP-7 from the player</string>
+    <string name="widget_radio_desc">A radio playing your song</string>
+    <string name="widget_now_desc">The song playing now, big</string>
 </resources>

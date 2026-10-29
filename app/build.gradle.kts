@@ -1,12 +1,12 @@
+import java.util.Properties
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
-// Public builds contain no maintainer Client ID. Users enter their own ID in
-// the one-time setup. Maintainers with an approved Spotify app may explicitly
-// opt in through -PSPOTIFY_CLIENT_ID=... or the matching environment variable.
+// Public builds contain no maintainer Client ID; users enter their own in the one-time setup.
 val bundledSpotifyClientId = providers.gradleProperty("SPOTIFY_CLIENT_ID")
     .orElse(providers.environmentVariable("SPOTIFY_CLIENT_ID"))
     .orNull
@@ -17,16 +17,21 @@ val localDebugKeystore = file(System.getProperty("user.home") + "/.android/debug
 
 android {
     namespace = "com.slowva.player"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.slowva.player"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 18
-        versionName = "2.0.5"
+        targetSdk = 36
+        versionCode = 19
+        versionName = "3.0.0"
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$bundledSpotifyClientId\"")
         vectorDrawables { useSupportLibrary = true }
+        // Last.fm key for genres and creators: local.properties, else the environment; blank hides those parts
+        val lastFmKey = rootProject.file("local.properties").takeIf { it.exists() }
+            ?.let { f -> Properties().apply { f.inputStream().use(::load) }.getProperty("LASTFM_API_KEY") }
+            ?: System.getenv("LASTFM_API_KEY").orEmpty()
+        buildConfigField("String", "LASTFM_API_KEY", "\"${lastFmKey.trim().filter(Char::isLetterOrDigit)}\"")
     }
 
     // one APK per ABI: the librespot binary is 14 MB, no point shipping both
@@ -39,6 +44,7 @@ android {
         }
     }
 
+    // same key as every earlier slowva release, so the update installs over it
     signingConfigs {
         if (localDebugKeystore.isFile) create("localRelease") {
             storeFile = localDebugKeystore
@@ -50,9 +56,7 @@ android {
 
     buildTypes {
         release {
-            if (localDebugKeystore.isFile) {
-                signingConfig = signingConfigs.getByName("localRelease")
-            }
+            signingConfig = signingConfigs.findByName("localRelease")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -64,8 +68,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
-    kotlinOptions { jvmTarget = "17" }
 
     buildFeatures {
         compose = true
@@ -73,35 +77,61 @@ android {
     }
 
     // librespot ships as lib*.so so Android extracts it into nativeLibraryDir,
-    // the only directory an app may still exec a binary from since API 29.
+    // the only directory an app may still exec a binary from since API 29
     packaging {
         jniLibs { useLegacyPackaging = true }
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/versions/**"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+        }
     }
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
-    implementation(composeBom)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.icons.extended)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
 
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation(libs.core.ktx)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.navigation.compose)
+    implementation(libs.documentfile)
+    implementation(libs.coil.compose)
+    implementation(libs.materialkolor.material3)
 
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.okhttp)
+    implementation(libs.media3.hls)
 
-    implementation("androidx.media:media:1.7.0")
-    implementation("androidx.browser:browser:1.8.0")
-    implementation("androidx.documentfile:documentfile:1.0.1")
-    implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
-    testImplementation("junit:junit:4.13.2")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation(libs.okhttp)
+    implementation(libs.browser)
+    coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
+
+    testImplementation(libs.junit)
+    // real org.json for parsing tests; the android.jar copy is a stub
+    testImplementation(libs.org.json)
 }

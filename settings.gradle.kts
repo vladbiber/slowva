@@ -19,5 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "slowva"
+
+rootProject.name = "Slowva"
 include(":app")

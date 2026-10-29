@@ -8,14 +8,19 @@ edition = "2021"
 librespot-core = { version = "=0.8.0", default-features = false, features = ["rustls-tls-webpki-roots"] }
 librespot-playback = { version = "=0.8.0", default-features = false, features = ["rustls-tls-webpki-roots"] }
 tokio = { version = "1", features = ["rt", "macros"] }
+log = "0.4"
 
 [[bin]]
 name = "slowva-token"
 path = "src/main.rs"
 
 [[bin]]
-name = "slowva-reverse"
-path = "src/bin/slowva-reverse.rs"
+name = "slowva-decode"
+path = "src/bin/slowva-decode.rs"
 
 [profile.release]
 strip = true
+
+# librespot-core with the platform pinned to Linux on Android, see vendor/librespot-core/src/config.rs
+[patch.crates-io]
+librespot-core = { path = "vendor/librespot-core" }

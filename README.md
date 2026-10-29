@@ -1,8 +1,8 @@
 # Slowva
 
-An unofficial Android Spotify client for playing music slower, with adjustable
-reverb, bass boost and frequency-tuning presets. Audio is decoded and processed
-locally on the phone.
+An unofficial Android music player for Spotify and your own files. It plays
+music slower, with reverb, bass, "magic Hz" tuning, vinyl sound and reverse.
+Audio is decoded and processed on the phone.
 
 > **Unofficial project.** Slowva is not affiliated with, sponsored by or
 > endorsed by Spotify. Spotify is a trademark of Spotify AB. The app uses an
@@ -12,72 +12,49 @@ locally on the phone.
 
 ## Features
 
-- Spotify library, search, playlists, albums and playback controls
-- playback speed from 0.50x to 1.25x with matching pitch shift
-- adjustable Freeverb and 0–12 dB bass boost
-- optional 432 Hz, 528 Hz and other frequency-tuning presets
-- album artwork in the full player and Android media controls
-- local librespot playback at 320 kbps
-- Spotify Authorization Code + PKCE; no client secret is stored or requested
-- **Slowva FX** home-screen widget for slow, reverb and local-player controls
-- optional **Slowva CAVA** home-screen widget; no visualizer covers the album in
-  the app itself
-- five interactive player looks: **Vinyl** (tonearm, scratch to seek), **CD**,
-  **Tape** (drag to shuttle), **TP-7** (jog wheel, slow fader, reverb knob) and
-  **Cover**; design inspired by [Spun](https://github.com/yappologistic/Spun)
-  by [@yappologistic](https://github.com/yappologistic)
-- **Real vinyl sound**: crackle, pops, scratches, wow & flutter, warmth, hiss
-- **Reverse mode**: whole tracks played from the last second to the first
-- **Local files**: add folders or single files from the phone, played through the same effects
-- calm **rain** sounds (drizzle, rain, storm) mixed on top of the music
-- **8D rotation**, stereo width and an "another room" muffle effect
-- one-tap presets: Slowed + reverb, Daycore, Nightcore, Lo-fi record and more
-- arm64 phone and x86_64 emulator builds
+- Spotify search, liked songs, playlists and saved albums, played inside Slowva
+  through the same effects, queue and lyrics as your own files
+- Your local music, playlists, Playlist Studio, a full queue with drag to reorder
+- Hand-drawn player looks: vinyl (scratch to seek), CD, tape, TP-7, MiniDisc,
+  boombox, car radio, cover
+- Sound: EQ with genre presets, speed and pitch, reverb, bass, "magic Hz" tuning,
+  8D, vinyl crackle, rain, reverse, hi-fi options
+- Modes: Evil, Godly and Good & Evil, each with its own sound, colors and icon
+- Synced lyrics (LRCLIB), visualizers, sleep timer, spin-the-wheel song picker
+- Editable Home with shelves from what you play, Last.fm genres, artists and
+  charts, MusicBrainz album info, in-app and home screen widgets
+- ListenBrainz scrobbling, star ratings with RateYourMusic CSV import
+- Tie-dye backgrounds in your theme colors, a rainbow or the album cover's colors
+- Android Auto, media notification and lock-screen controls, keyboard-phone shortcuts
 
-Spotify Premium is required for Development Mode and local playback.
+Spotify Premium is required for Spotify playback.
 
 ## Install the APK
 
-Download the ready-made Android 8.0+ arm64 APK from the
-[Slowva 2.0.5 release](https://github.com/vladbiber/slowva/releases/tag/2.0.5),
-or use the direct link:
-
-[**Download Slowva-arm64-v8a.apk**](https://github.com/vladbiber/slowva/releases/download/2.0.5/Slowva-arm64-v8a.apk)
-
-This build is intended for modern arm64 Android phones, including Samsung
-devices. Android may ask you to allow installation from your browser or file
-manager. SHA-256: `c33271d5dde91336a5fbc9727bd5cd3fe6fb3b62fd10c629d230da8e8affe6fb`.
+Download `Slowva-arm64-v8a.apk` from the
+[latest release](https://github.com/vladbiber/slowva/releases/latest)
+(Android 8.0+, arm64). It installs over Slowva 2.x and keeps your sign-in.
+Android may ask you to allow installation from your browser or file manager.
 
 ## One-time Spotify setup
 
-Public builds intentionally do **not** contain the maintainer's Spotify Client
-ID. On first launch, Slowva guides every user through these steps:
+Everything is in **Settings › Connections › Spotify**.
 
-1. Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Create an app with Web API access.
-3. Add this exact Redirect URI in the app settings:
+1. Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   and create an app with Web API access.
+2. Add this exact Redirect URI in the app settings:
 
    ```text
    http://127.0.0.1:5588/login
    ```
 
-4. Copy the 32-character Client ID into Slowva and tap **Save & sign in**.
+3. Paste the 32-character Client ID into Slowva and tap **Save**.
+4. Tap **Sign in**. Spotify asks you to approve twice: once for playback, once
+   for your own app. If the browser never comes back, use **Sign in inside the app**.
 
-Do not paste a Client Secret. Mobile authentication uses Spotify's recommended
-[Authorization Code with PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow),
-for which the Client ID and exact allowlisted Redirect URI are required.
-
-### First-time player pairing
-
-Signing in unlocks the library, but the local player must also be paired once:
-
-1. Open the official Spotify app with the same Premium account and start a song.
-2. Open **Devices** / **Devices available**.
-3. Select the device named **slowva** and wait for it to connect.
-4. Return to Slowva. The player credentials are now saved on this phone.
-
-After this first pairing, use **Connect to this phone** inside Slowva. Pair again
-only after signing out, clearing the app's data or reinstalling the app.
+Do not paste a Client Secret. Sign-in uses
+[Authorization Code with PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow).
+There is no Spotify Connect pairing any more.
 
 ### Why does every public user need a Client ID?
 
@@ -91,30 +68,24 @@ and [2026 migration guide](https://developer.spotify.com/documentation/web-api/t
 An organization with approved Extended Quota access can make a preconfigured
 build instead; see `SPOTIFY_CLIENT_ID` under Building.
 
-## Effects
+## How Spotify playback works
 
-- **Slow** uses a four-point cubic Hermite resampler. Pitch drops or rises with
-  playback speed instead of being corrected back to the original pitch.
-- **Reverb** is a Freeverb implementation with eight comb filters, four all-pass
-  filters per channel and stereo spread.
-- **Bass boost** uses an RBJ low-shelf filter with adjustable gain and corner
-  frequency.
-- **Frequency presets** retune the nearest note to the selected frequency. The
-  healing or biological claims often attached to “solfeggio” frequencies are
-  not supported by research; the presets are included only as sound effects.
-- **Vinyl** adds wow and flutter locked to a 33⅓ rpm platter (slower when the
-  track is slowed), groove rolloff with soft saturation and mono bass, surface
-  hiss, motor rumble, random crackle and two scratches that tick once per
-  revolution. Presets: Mint, Played, Dusty, Lo-fi.
-- **Reverse** decodes the complete track once (`libslowvareverse.so`, a small
-  librespot decoder that registers no Connect device), then plays the PCM from
-  the end through the same effect chain and continues with the next track.
-  Decoded tracks take about 10 MB per minute; the last four are kept.
-- **Space**: stereo width, an equal-power "8D" auto-pan and a low-pass
-  "another room" effect.
+```text
+Spotify track
+  -> libslowvadecode (librespot 0.8.0, no Connect device)
+  -> PCM s16le, 44.1 kHz stereo, served to ExoPlayer as a WAV stream
+  -> speed and pitch, then Slowva's effect chain
+  -> Android audio output
+```
 
-Slider changes are smoothed in the DSP to prevent abrupt speed jumps and
-reverb clicks.
+Seeking restarts the decoder at the new position. Reverse decodes the whole
+track once into the cache (about 10 MB a minute; the last four are kept).
+Android 10 and newer only run binaries from the app's `nativeLibraryDir`, so the
+helpers ship as `lib*.so` files.
+
+The frequency presets retune the nearest note to the chosen frequency. The
+healing claims often attached to "solfeggio" frequencies are not supported by
+research; the presets are sound effects only.
 
 ## Privacy and credentials
 
@@ -127,80 +98,51 @@ reverb clicks.
 
 ## Building
 
-Requirements:
-
-- JDK 17
-- Android SDK 35
-- Android NDK 28.2
-- Rust with `aarch64-linux-android`
+Requirements: JDK 17, Android SDK (compileSdk 37), Android NDK 28.2, Rust with
+the `aarch64-linux-android` target (and `x86_64-linux-android` for the emulator).
 
 ```sh
 git clone https://github.com/vladbiber/slowva.git
 cd slowva
-
-rustup target add aarch64-linux-android
-./native/build-librespot.sh
-
-./gradlew testDebugUnitTest assembleDebug
-```
-
-The arm64 phone APK is written to:
-
-```text
-app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-```
-
-Build the phone and x86_64 emulator native binaries with:
-
-```sh
+rustup target add aarch64-linux-android x86_64-linux-android
 ./native/build-librespot.sh --all
+./gradlew testDebugUnitTest assembleRelease
+# APK -> app/build/outputs/apk/release/app-arm64-v8a-release.apk
 ```
 
-Maintainers with an approved shared Spotify app may optionally bundle its
-public Client ID. Ordinary public builds should leave this unset:
+`native/token-helper/vendor/librespot-core` is librespot-core 0.8.0 with one
+change: it reports Linux on Android, because Spotify refuses the Android
+client identity for these credentials.
 
-```sh
-./gradlew assembleRelease -PSPOTIFY_CLIENT_ID=0123456789abcdef0123456789abcdef
-```
-
-Never pass a Client Secret to Gradle or commit one. Production release signing
-is a maintainer responsibility; when a local Android debug key exists, the
-development release task uses it to create installable test APKs.
-
-## Audio architecture
-
-```text
-Spotify Connect
-  -> embedded librespot 0.8.0 (`--backend pipe`)
-  -> PCM s16le, 44.1 kHz stereo
-  -> Hermite slow/pitch resampler
-  -> Freeverb + low-shelf filter
-  -> Android AudioTrack
-```
-
-Android 10 and newer cannot execute arbitrary files from the app data
-directory. The native binaries are therefore packaged as `lib*.so` files and
-extracted into Android's executable `nativeLibraryDir`.
+Maintainers with an approved Spotify app may bundle its public Client ID with
+`-PSPOTIFY_CLIENT_ID=...`. Never pass a Client Secret to Gradle or commit one.
 
 ## Known limitations
 
-- Pairing must be repeated after signing out, clearing app data or reinstalling.
-- Spotify Web API quotas and supported endpoints can change.
-- While slowed, Spotify Connect can report a position ahead of the sound because
-  the PCM pipe is deliberately consumed below real time.
-- Effects apply only while playback is on the local Slowva device.
-- The app supports Android 8.0+ and arm64/x86_64.
+- Spotify Web API quotas and endpoints can change. Without your own Client ID,
+  search and the library are mostly refused as busy.
+- Every Spotify song opens a fresh librespot session, so a song takes about a
+  second to start and there is no gapless playback between Spotify songs.
+- Slowva is not a Spotify Connect device; other Spotify apps can't control it.
 
 ## Credits
 
-The player looks (vinyl, CD, cassette and TP-7 style) are inspired by
-[Spun](https://github.com/yappologistic/Spun), a CD-shaped music player for
-Linux by [@yappologistic](https://github.com/yappologistic). Slowva's versions
-are an independent Jetpack Compose reimplementation; no Spun code or assets are
-included. Thank you for the beautiful designs.
+- [Guava Player](https://github.com/vladbiber/guava-player): Slowva 3.0 is built on
+  its code, without YouTube and radio
+- [librespot](https://github.com/librespot-org/librespot) (MIT): Spotify playback
+- [Levyra](https://github.com/LUC4N3X/Levyra-deepsound) (GPL-3.0): the Material 3
+  Expressive shape style (cookie, clover and sunny shapes)
+- [LRCLIB](https://lrclib.net): synced lyrics
+- [Last.fm](https://www.last.fm): genres, artists and charts
+- [MusicBrainz](https://musicbrainz.org): album info
+- [ListenBrainz](https://listenbrainz.org): scrobbling
+- [Spun](https://github.com/yappologistic/Spun) by
+  [@yappologistic](https://github.com/yappologistic): the first player looks
+  (vinyl, CD, cassette, TP-7) were inspired by it; an independent Compose
+  reimplementation, no Spun code or assets
 
 ## License
 
-Slowva source code is available under the [MIT License](LICENSE). See
+GPL-3.0 since 3.0 (2.x releases were MIT). See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party software and
 trademark notices.
